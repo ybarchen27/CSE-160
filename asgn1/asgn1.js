@@ -1,17 +1,8 @@
 // ============================================================
 // CSE 160 – Assignment 1: Painting  (Awesome Edition)
 // asgn1.js
-//
-// Awesome features:
-//  1. Paint brush – splat of alpha-blended circles that looks like real paint
-//  2. Brush aligned to stroke direction (rotated oval stamp)
-//  3. Gap-filling with GL_LINES between mouse samples
-//  4. Alpha slider for transparent / watercolour paint
 // ============================================================
 
-// ---- Shaders ----
-// Vertex shader passes tex-coord so the fragment shader can
-// compute a soft circular falloff for the paint splat.
 const VSHADER_SOURCE = `
   attribute vec4 a_Position;
   uniform float u_PointSize;
@@ -21,48 +12,49 @@ const VSHADER_SOURCE = `
   }
 `;
 
+// Fragment shader: soft circular falloff on GL_POINTS via gl_PointCoord.
+// For triangles gl_PointCoord is undefined so it just uses u_FragColor as-is.
 const FSHADER_SOURCE = `
   precision mediump float;
-  uniform vec4 u_FragColor;
+  uniform vec4  u_FragColor;
+  uniform float u_PointSize;
+  uniform bool  u_IsPoint;
   void main() {
-    // Soft circular falloff using gl_PointCoord (only active for GL_POINTS)
-    vec2 pc = gl_PointCoord - vec2(0.5);
-    float dist = length(pc);
-    if (dist > 0.5) discard;
-    // Smooth edge: full opacity at centre, fades to 0 at edge
-    float alpha = smoothstep(0.5, 0.15, dist);
-    gl_FragColor = vec4(u_FragColor.rgb, u_FragColor.a * alpha);
+    if (u_IsPoint) {
+      vec2  pc   = gl_PointCoord - vec2(0.5);
+      float dist = length(pc);
+      if (dist > 0.5) discard;
+      float alpha = smoothstep(0.5, 0.10, dist);
+      gl_FragColor = vec4(u_FragColor.rgb, u_FragColor.a * alpha);
+    } else {
+      gl_FragColor = u_FragColor;
+    }
   }
 `;
 
 // ---- Globals ----
 let gl, canvas;
-let a_Position, u_FragColor, u_PointSize;
+let a_Position, u_FragColor, u_PointSize, u_IsPoint;
 
 let g_shapesList = [];
-let g_shape    = 'point';
-let g_color    = [1.0, 0.0, 0.0, 1.0];  // rgba
-let g_size     = 10;
+let g_shape    = 'paint';
+let g_color    = [1.0, 0.0, 0.0, 1.0];
+let g_size     = 20;
 let g_segments = 10;
-let g_alpha    = 1.0;
 
-// For gap-filling: remember where the last stroke position was
-let g_lastX = null;
-let g_lastY = null;
+let g_lastX = null, g_lastY = null;  // gap-fill tracking
+let g_prevX = null, g_prevY = null;  // direction tracking
 
 // ============================================================
-// WebGL Setup
+// Setup
 // ============================================================
 function setupWebGL() {
   canvas = document.getElementById('webgl');
   gl = canvas.getContext('webgl', { preserveDrawingBuffer: true });
   if (!gl) { alert('WebGL not supported'); return false; }
-
-  // Enable alpha blending so transparent paint layers properly
   gl.enable(gl.BLEND);
   gl.blendFunc(gl.SRC_ALPHA, gl.ONE_MINUS_SRC_ALPHA);
-
-  gl.clearColor(0.0, 0.0, 0.0, 1.0);
+  gl.clearColor(0, 0, 0, 1);
   gl.clear(gl.COLOR_BUFFER_BIT);
   return true;
 }
@@ -72,161 +64,180 @@ function connectVariablesToGLSL() {
   a_Position  = gl.getAttribLocation (gl.program, 'a_Position');
   u_FragColor = gl.getUniformLocation(gl.program, 'u_FragColor');
   u_PointSize = gl.getUniformLocation(gl.program, 'u_PointSize');
+  u_IsPoint   = gl.getUniformLocation(gl.program, 'u_IsPoint');
   return true;
 }
 
 // ============================================================
-// Shape Classes
+// Low-level draw helpers
 // ============================================================
-
-class Point {
-  constructor(x, y, color, size) {
-    this.x = x; this.y = y;
-    this.color = color.slice(); this.size = size;
-  }
-  render() {
-    gl.uniform4f(u_FragColor, ...this.color);
-    gl.uniform1f(u_PointSize, this.size);
-    bufferAndDraw([this.x, this.y], gl.POINTS, 1);
-  }
+function setColor(color) {
+  gl.uniform4f(u_FragColor, color[0], color[1], color[2], color[3]);
 }
 
-// ---- Paint Brush ----
-// Draws a cluster of soft alpha-blended splat points that look like
-// a real paint dab. The cluster is stretched and rotated along the
-// stroke direction (dx,dy) so it aligns with the stroke.
-class PaintBrush {
-  constructor(x, y, color, size, dx, dy) {
-    this.x = x; this.y = y;
-    this.color = color.slice(); this.size = size;
-    // Normalise direction; default to vertical if no motion
-    const len = Math.sqrt(dx*dx + dy*dy);
-    this.dx = len > 0 ? dx/len : 0;
-    this.dy = len > 0 ? dy/len : 1;
-  }
-  render() {
-    gl.uniform4f(u_FragColor, ...this.color);
-
-    const r  = this.size / 400;   // base radius in clip-space
-    const dx = this.dx, dy = this.dy;
-    // Perpendicular to stroke direction
-    const px = -dy, py = dx;
-
-    // Scatter several soft points; stretch along stroke (×1.8), squash perp (×0.5)
-    const offsets = [
-      [0,      0    ],
-      [ 0.6,   0    ],
-      [-0.6,   0    ],
-      [ 0.3,   0.3  ],
-      [-0.3,  -0.3  ],
-      [ 0.9,  -0.1  ],
-      [-0.9,   0.1  ],
-    ];
-
-    const splatSize = this.size * 0.75;
-    gl.uniform1f(u_PointSize, splatSize);
-
-    for (const [along, perp] of offsets) {
-      const ox = dx * along * r * 1.8 + px * perp * r * 0.5;
-      const oy = dy * along * r * 1.8 + py * perp * r * 0.5;
-      bufferAndDraw([this.x + ox, this.y + oy], gl.POINTS, 1);
-    }
-  }
+function drawPoints(coords, size) {
+  // coords: flat [x,y, x,y, ...]
+  gl.uniform1f(u_PointSize, size);
+  gl.uniform1i(u_IsPoint, 1);
+  const buf = gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(coords), gl.STATIC_DRAW);
+  gl.vertexAttribPointer(a_Position, 2, gl.FLOAT, false, 0, 0);
+  gl.enableVertexAttribArray(a_Position);
+  gl.drawArrays(gl.POINTS, 0, coords.length / 2);
 }
 
-// ---- Stroke Segment ----
-// Draws a thick filled line between two points using a rectangle
-// (two triangles) aligned along the stroke, with rounded caps via circles.
-// This fills gaps between mouse samples.
-class StrokeSegment {
-  constructor(x1, y1, x2, y2, color, size) {
-    this.x1 = x1; this.y1 = y1;
-    this.x2 = x2; this.y2 = y2;
-    this.color = color.slice(); this.size = size;
-  }
-  render() {
-    gl.uniform4f(u_FragColor, ...this.color);
-    gl.uniform1f(u_PointSize, this.size);
-
-    const dx = this.x2 - this.x1, dy = this.y2 - this.y1;
-    const len = Math.sqrt(dx*dx + dy*dy);
-    if (len < 1e-6) return;
-
-    const r = this.size / 400;
-    // Perpendicular unit vector
-    const px = -dy/len * r, py = dx/len * r;
-
-    // Rectangle: two triangles forming a capsule body
-    const verts = [
-      this.x1 + px, this.y1 + py,
-      this.x1 - px, this.y1 - py,
-      this.x2 + px, this.y2 + py,
-      this.x1 - px, this.y1 - py,
-      this.x2 - px, this.y2 - py,
-      this.x2 + px, this.y2 + py,
-    ];
-    bufferAndDraw(verts, gl.TRIANGLES, 6);
-
-    // Rounded caps using GL_POINTS (soft circle from fragment shader)
-    bufferAndDraw([this.x1, this.y1], gl.POINTS, 1);
-    bufferAndDraw([this.x2, this.y2], gl.POINTS, 1);
-  }
-}
-
-class Triangle {
-  constructor(verts, color) {
-    this.verts = verts.slice(); this.color = color.slice();
-  }
-  render() {
-    gl.uniform4f(u_FragColor, ...this.color);
-    gl.uniform1f(u_PointSize, 1.0);
-    bufferAndDraw(this.verts, gl.TRIANGLES, 3);
-  }
-}
-
-class Circle {
-  constructor(x, y, color, size, segments) {
-    this.x = x; this.y = y;
-    this.color = color.slice(); this.size = size; this.segments = segments;
-  }
-  render() {
-    gl.uniform4f(u_FragColor, ...this.color);
-    gl.uniform1f(u_PointSize, 1.0);
-    const r = this.size / 200;
-    const verts = [];
-    for (let i = 0; i < this.segments; i++) {
-      const a1 = (2*Math.PI*i)      /this.segments;
-      const a2 = (2*Math.PI*(i+1))  /this.segments;
-      verts.push(this.x, this.y);
-      verts.push(this.x + r*Math.cos(a1), this.y + r*Math.sin(a1));
-      verts.push(this.x + r*Math.cos(a2), this.y + r*Math.sin(a2));
-    }
-    bufferAndDraw(verts, gl.TRIANGLES, this.segments * 3);
-  }
-}
-
-// ============================================================
-// Shared buffer helper
-// ============================================================
-function bufferAndDraw(verts, mode, count) {
+function drawTriangles(verts) {
+  gl.uniform1f(u_PointSize, 1.0);
+  gl.uniform1i(u_IsPoint, 0);
   const buf = gl.createBuffer();
   gl.bindBuffer(gl.ARRAY_BUFFER, buf);
   gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(verts), gl.STATIC_DRAW);
   gl.vertexAttribPointer(a_Position, 2, gl.FLOAT, false, 0, 0);
   gl.enableVertexAttribArray(a_Position);
-  gl.drawArrays(mode, 0, count);
+  gl.drawArrays(gl.TRIANGLES, 0, verts.length / 2);
+}
+
+// ============================================================
+// Shape Classes  (each stores data + knows how to render itself)
+// ============================================================
+
+class Point {
+  constructor(x, y, color, size) {
+    this.x = x; this.y = y; this.color = color.slice(); this.size = size;
+  }
+  render() {
+    setColor(this.color);
+    drawPoints([this.x, this.y], this.size);
+  }
+}
+
+// PaintBrush: a cluster of soft splat-points spread along the stroke direction.
+// Offsets are in PIXEL space so the brush always looks the right size.
+class PaintBrush {
+  constructor(x, y, color, size, dx, dy) {
+    this.x = x; this.y = y; this.color = color.slice(); this.size = size;
+    const len = Math.sqrt(dx*dx + dy*dy);
+    this.dx = len > 0 ? dx/len : 1;   // along-stroke unit vector
+    this.dy = len > 0 ? dy/len : 0;
+  }
+  render() {
+    setColor(this.color);
+
+    // Convert one pixel to clip-space units
+    const pxX = 2 / canvas.width;
+    const pxY = 2 / canvas.height;
+
+    const dx = this.dx, dy = this.dy;
+    const px = -dy, py = dx;           // perpendicular unit vector
+
+    // Spread in pixels: stretch ×1.4 along stroke, squash ×0.4 across it
+    const spread = this.size * 0.5;
+    const offsets = [
+      [  0,      0    ],
+      [  0.7,    0.15 ],
+      [ -0.7,   -0.15 ],
+      [  1.3,    0.05 ],
+      [ -1.3,   -0.05 ],
+      [  0.35,   0.35 ],
+      [ -0.35,  -0.35 ],
+      [  0.9,   -0.25 ],
+      [ -0.9,    0.25 ],
+    ];
+
+    // Each splat is slightly smaller than the brush size for a fuzzy look
+    const splatPx = this.size * 0.65;
+
+    const coords = [];
+    for (const [along, perp] of offsets) {
+      const ox = (dx * along + px * perp) * spread * pxX;
+      const oy = (dy * along + py * perp) * spread * pxY;
+      coords.push(this.x + ox, this.y + oy);
+    }
+    drawPoints(coords, splatPx);
+  }
+}
+
+// StrokeSegment: rectangle + round caps between two points – fills drag gaps.
+class StrokeSegment {
+  constructor(x1, y1, x2, y2, color, size) {
+    this.x1 = x1; this.y1 = y1; this.x2 = x2; this.y2 = y2;
+    this.color = color.slice(); this.size = size;
+  }
+  render() {
+    setColor(this.color);
+
+    const dx = this.x2 - this.x1, dy = this.y2 - this.y1;
+    const len = Math.sqrt(dx*dx + dy*dy);
+    if (len < 1e-9) return;
+
+    // Half-width in clip-space (size is in pixels)
+    const hw = (this.size / 2) * (2 / canvas.width);
+    const hh = (this.size / 2) * (2 / canvas.height);
+
+    // Perpendicular in clip-space
+    const nx = (-dy / len) * hw;
+    const ny = ( dx / len) * hh;
+
+    const x1=this.x1, y1=this.y1, x2=this.x2, y2=this.y2;
+
+    // Rectangle body (two triangles, no soft edge needed – GL_POINTS caps handle that)
+    gl.uniform1i(u_IsPoint, 0);
+    drawTriangles([
+      x1+nx, y1+ny,   x1-nx, y1-ny,   x2+nx, y2+ny,
+      x1-nx, y1-ny,   x2-nx, y2-ny,   x2+nx, y2+ny,
+    ]);
+
+    // Soft round caps at both ends
+    drawPoints([x1, y1, x2, y2], this.size);
+  }
+}
+
+class Triangle {
+  constructor(verts, color) { this.verts = verts.slice(); this.color = color.slice(); }
+  render() {
+    setColor(this.color);
+    drawTriangles(this.verts);
+  }
+}
+
+class Circle {
+  constructor(x, y, color, size, segments) {
+    this.x=x; this.y=y; this.color=color.slice(); this.size=size; this.segments=segments;
+  }
+  render() {
+    setColor(this.color);
+    const r = this.size / 200;
+    const verts = [];
+    for (let i = 0; i < this.segments; i++) {
+      const a1 = 2*Math.PI*i     /this.segments;
+      const a2 = 2*Math.PI*(i+1) /this.segments;
+      verts.push(this.x, this.y,
+                 this.x + r*Math.cos(a1), this.y + r*Math.sin(a1),
+                 this.x + r*Math.cos(a2), this.y + r*Math.sin(a2));
+    }
+    drawTriangles(verts);
+  }
 }
 
 // ============================================================
 // Render
+// Two modes:
+//  renderAllShapes()  – full clear + redraw (used for Clear / Draw Picture)
+//  renderShape(s)     – draw one shape WITHOUT clearing (used during painting
+//                       so alpha layers accumulate naturally on the framebuffer)
 // ============================================================
 function renderAllShapes() {
   gl.clear(gl.COLOR_BUFFER_BIT);
   for (const s of g_shapesList) s.render();
 }
 
+function renderShape(s) {
+  s.render();   // no clear – alpha blends onto whatever is already on screen
+}
+
 // ============================================================
-// Input Handling
+// Input
 // ============================================================
 function canvasCoords(ev) {
   const rect = canvas.getBoundingClientRect();
@@ -235,40 +246,40 @@ function canvasCoords(ev) {
   return [x, y];
 }
 
-function addShapeAt(x, y, dx, dy) {
+function addAndDraw(x, y, dx, dy) {
+  let shape;
+
   if (g_shape === 'paint') {
-    // Gap-fill: if we moved far enough, insert a StrokeSegment first
+    // Gap-fill segment first
     if (g_lastX !== null) {
-      const dist = Math.sqrt((x-g_lastX)**2 + (y-g_lastY)**2);
-      if (dist > 0.001) {
-        g_shapesList.push(new StrokeSegment(g_lastX, g_lastY, x, y, g_color, g_size));
-      }
+      const seg = new StrokeSegment(g_lastX, g_lastY, x, y, g_color, g_size);
+      g_shapesList.push(seg);
+      renderShape(seg);
     }
-    g_shapesList.push(new PaintBrush(x, y, g_color, g_size, dx, dy));
+    shape = new PaintBrush(x, y, g_color, g_size, dx, dy);
     g_lastX = x; g_lastY = y;
 
   } else if (g_shape === 'point') {
-    g_shapesList.push(new Point(x, y, g_color, g_size));
+    shape = new Point(x, y, g_color, g_size);
 
   } else if (g_shape === 'triangle') {
     const s = g_size / 300;
-    g_shapesList.push(new Triangle(
-      [x, y+s,  x-s, y-s,  x+s, y-s], g_color));
+    shape = new Triangle([x, y+s, x-s, y-s, x+s, y-s], g_color);
 
-  } else if (g_shape === 'circle') {
-    g_shapesList.push(new Circle(x, y, g_color, g_size, g_segments));
+  } else {
+    shape = new Circle(x, y, g_color, g_size, g_segments);
   }
-}
 
-let g_prevX = null, g_prevY = null;
+  g_shapesList.push(shape);
+  renderShape(shape);   // draw incrementally – preserves alpha accumulation
+}
 
 function handleClick(ev) {
   const [x, y] = canvasCoords(ev);
   const dx = g_prevX !== null ? x - g_prevX : 0;
   const dy = g_prevY !== null ? y - g_prevY : 0;
-  addShapeAt(x, y, dx, dy);
+  addAndDraw(x, y, dx, dy);
   g_prevX = x; g_prevY = y;
-  renderAllShapes();
 }
 
 function handleMouseMove(ev) {
@@ -277,33 +288,30 @@ function handleMouseMove(ev) {
 }
 
 function handleMouseUp() {
-  // Reset stroke tracking when the mouse is released
   g_lastX = null; g_lastY = null;
   g_prevX = null; g_prevY = null;
 }
 
 // ============================================================
-// UI Helpers
+// UI
 // ============================================================
 function setShape(s) {
   g_shape = s;
-  ['paint','point','triangle','circle'].forEach(id => {
-    document.getElementById('btn_' + id).classList.toggle('active', s === id);
-  });
+  ['paint','point','triangle','circle'].forEach(id =>
+    document.getElementById('btn_' + id).classList.toggle('active', s === id));
 }
 
 function updateColor() {
   const r = +document.getElementById('rSlider').value;
   const g = +document.getElementById('gSlider').value;
   const b = +document.getElementById('bSlider').value;
-  g_alpha  = +document.getElementById('aSlider').value / 255;
+  const a = +document.getElementById('aSlider').value / 255;
   document.getElementById('rVal').textContent = r;
   document.getElementById('gVal').textContent = g;
   document.getElementById('bVal').textContent = b;
   document.getElementById('aVal').textContent = document.getElementById('aSlider').value;
-  const preview = `rgba(${r},${g},${b},${g_alpha.toFixed(2)})`;
-  document.getElementById('colorBox').style.background = preview;
-  g_color = [r/255, g/255, b/255, g_alpha];
+  document.getElementById('colorBox').style.background = `rgba(${r},${g},${b},${a.toFixed(2)})`;
+  g_color = [r/255, g/255, b/255, a];
 }
 
 function clearCanvas() {
@@ -314,54 +322,47 @@ function clearCanvas() {
 }
 
 // ============================================================
-// Draw Picture – full landscape with initials "YB"
+// Draw Picture
 // ============================================================
 function drawPicture() {
   g_shapesList = [];
   function tri(x1,y1, x2,y2, x3,y3, r,g,b,a=1.0) {
-    g_shapesList.push(new Triangle([x1,y1, x2,y2, x3,y3], [r,g,b,a]));
+    g_shapesList.push(new Triangle([x1,y1,x2,y2,x3,y3], [r,g,b,a]));
   }
 
-  // Sky gradient panels
+  // Sky gradient
   const sky = [[0.20,0.60,0.90],[0.15,0.50,0.85],[0.25,0.65,0.95],[0.10,0.45,0.80]];
   for (let i=0; i<8; i++) {
     const c=sky[i%sky.length], x=-1+i*0.25;
     tri(x,1.0, x+0.25,1.0, x,0.0, ...c);
     tri(x+0.25,1.0, x+0.25,0.0, x,0.0, ...c);
   }
-
   // Ground
   tri(-1,-1, 1,-1, -1,-0.05, 0.15,0.55,0.15);
   tri( 1,-1, 1,-0.05, -1,-0.05, 0.10,0.45,0.10);
-
   // Sun
   const sx=0.65, sy=0.70, sr=0.18;
   for (let i=0; i<12; i++) {
-    const a1=(2*Math.PI*i)/12, a2=(2*Math.PI*(i+1))/12;
+    const a1=2*Math.PI*i/12, a2=2*Math.PI*(i+1)/12;
     tri(sx,sy, sx+sr*Math.cos(a1),sy+sr*Math.sin(a1),
                sx+sr*Math.cos(a2),sy+sr*Math.sin(a2), 1.0,0.85,0.0);
   }
-  // Sun glow – semi-transparent halo
+  // Sun glow (transparent halo)
   for (let i=0; i<12; i++) {
-    const a1=(2*Math.PI*i)/12, a2=(2*Math.PI*(i+1))/12;
-    const hr=sr*1.6;
+    const a1=2*Math.PI*i/12, a2=2*Math.PI*(i+1)/12, hr=sr*1.6;
     tri(sx,sy, sx+hr*Math.cos(a1),sy+hr*Math.sin(a1),
                sx+hr*Math.cos(a2),sy+hr*Math.sin(a2), 1.0,0.95,0.3, 0.25);
   }
-
-  // Left mountain + snow cap
+  // Left mountain + snow + shadow
   tri(-0.9,-0.05, -0.45,0.55,  0.0,-0.05, 0.40,0.40,0.45);
   tri(-0.9,-0.05, -0.45,0.55, -1.0, 0.20, 0.35,0.35,0.40);
   tri(-0.55,0.40, -0.45,0.55, -0.35,0.40, 0.92,0.95,1.0);
-  // Shadow on mountain – translucent dark overlay
   tri(-0.9,-0.05, -0.45,0.55, -1.0,0.20,  0.0,0.0,0.1, 0.18);
-
-  // Right mountain + snow cap
+  // Right mountain + snow
   tri(0.10,-0.05, 0.55,0.65, 1.0,-0.05,  0.35,0.40,0.42);
   tri(0.45,0.50,  0.55,0.65, 0.65,0.50,  0.92,0.95,1.0);
-
   // Trees
-  function tree(tx, ty) {
+  function tree(tx,ty) {
     tri(tx-0.02,ty-0.18, tx+0.02,ty-0.18, tx-0.02,ty, 0.55,0.27,0.07);
     tri(tx+0.02,ty-0.18, tx+0.02,ty,      tx-0.02,ty, 0.55,0.27,0.07);
     tri(tx-0.10,ty,      tx+0.10,ty,       tx,ty+0.20, 0.10,0.55,0.10);
@@ -370,16 +371,14 @@ function drawPicture() {
   }
   tree(-0.28,-0.05);
   tree( 0.00,-0.05);
-
-  // Letter Y (red-orange)
+  // Letter Y
   tri(-0.82,0.35, -0.70,0.35, -0.62,0.15, 0.95,0.30,0.10);
   tri(-0.82,0.35, -0.62,0.15, -0.74,0.15, 0.95,0.30,0.10);
   tri(-0.58,0.35, -0.46,0.35, -0.62,0.15, 0.95,0.30,0.10);
   tri(-0.58,0.35, -0.62,0.15, -0.50,0.15, 0.95,0.30,0.10);
   tri(-0.68,0.15, -0.56,0.15, -0.68,-0.02, 0.95,0.30,0.10);
   tri(-0.56,0.15, -0.56,-0.02,-0.68,-0.02, 0.95,0.30,0.10);
-
-  // Letter B (blue)
+  // Letter B
   const bx=0.20;
   tri(bx,    0.35, bx+0.10,0.35, bx,    -0.02, 0.20,0.55,0.95);
   tri(bx+0.10,0.35, bx+0.10,-0.02, bx, -0.02, 0.20,0.55,0.95);
@@ -392,30 +391,27 @@ function drawPicture() {
 }
 
 // ============================================================
-// Shader Init
+// Shader helpers
 // ============================================================
 function initShaders(gl, vsSource, fsSource) {
   const vs = compileShader(gl, gl.VERTEX_SHADER,   vsSource);
   const fs = compileShader(gl, gl.FRAGMENT_SHADER, fsSource);
   if (!vs || !fs) return false;
   const prog = gl.createProgram();
-  gl.attachShader(prog, vs);
-  gl.attachShader(prog, fs);
+  gl.attachShader(prog, vs); gl.attachShader(prog, fs);
   gl.linkProgram(prog);
   if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) {
-    console.error('Link error:', gl.getProgramInfoLog(prog)); return false;
+    console.error('Link:', gl.getProgramInfoLog(prog)); return false;
   }
   gl.useProgram(prog);
   gl.program = prog;
   return true;
 }
-
 function compileShader(gl, type, src) {
   const sh = gl.createShader(type);
-  gl.shaderSource(sh, src);
-  gl.compileShader(sh);
+  gl.shaderSource(sh, src); gl.compileShader(sh);
   if (!gl.getShaderParameter(sh, gl.COMPILE_STATUS)) {
-    console.error('Compile error:', gl.getShaderInfoLog(sh));
+    console.error('Compile:', gl.getShaderInfoLog(sh));
     gl.deleteShader(sh); return null;
   }
   return sh;
@@ -427,9 +423,9 @@ function compileShader(gl, type, src) {
 function main() {
   if (!setupWebGL()) return;
   if (!connectVariablesToGLSL()) return;
-  canvas.onmousedown = handleClick;
-  canvas.onmousemove = handleMouseMove;
-  canvas.onmouseup   = handleMouseUp;
+  canvas.onmousedown  = handleClick;
+  canvas.onmousemove  = handleMouseMove;
+  canvas.onmouseup    = handleMouseUp;
   canvas.onmouseleave = handleMouseUp;
   renderAllShapes();
 }
