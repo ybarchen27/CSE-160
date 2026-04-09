@@ -13,14 +13,13 @@ const VSHADER_SOURCE = `
 `;
 
 // Fragment shader: soft circular falloff on GL_POINTS via gl_PointCoord.
-// For triangles gl_PointCoord is undefined so it just uses u_FragColor as-is.
+// u_IsPoint is a float: 1.0 = point splat mode, 0.0 = solid triangle mode.
 const FSHADER_SOURCE = `
   precision mediump float;
   uniform vec4  u_FragColor;
-  uniform float u_PointSize;
-  uniform bool  u_IsPoint;
+  uniform float u_IsPoint;
   void main() {
-    if (u_IsPoint) {
+    if (u_IsPoint > 0.5) {
       vec2  pc   = gl_PointCoord - vec2(0.5);
       float dist = length(pc);
       if (dist > 0.5) discard;
@@ -76,9 +75,8 @@ function setColor(color) {
 }
 
 function drawPoints(coords, size) {
-  // coords: flat [x,y, x,y, ...]
   gl.uniform1f(u_PointSize, size);
-  gl.uniform1i(u_IsPoint, 1);
+  gl.uniform1f(u_IsPoint, 1.0);
   const buf = gl.createBuffer();
   gl.bindBuffer(gl.ARRAY_BUFFER, buf);
   gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(coords), gl.STATIC_DRAW);
@@ -89,7 +87,7 @@ function drawPoints(coords, size) {
 
 function drawTriangles(verts) {
   gl.uniform1f(u_PointSize, 1.0);
-  gl.uniform1i(u_IsPoint, 0);
+  gl.uniform1f(u_IsPoint, 0.0);
   const buf = gl.createBuffer();
   gl.bindBuffer(gl.ARRAY_BUFFER, buf);
   gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(verts), gl.STATIC_DRAW);
@@ -181,8 +179,7 @@ class StrokeSegment {
 
     const x1=this.x1, y1=this.y1, x2=this.x2, y2=this.y2;
 
-    // Rectangle body (two triangles, no soft edge needed – GL_POINTS caps handle that)
-    gl.uniform1i(u_IsPoint, 0);
+    // Rectangle body
     drawTriangles([
       x1+nx, y1+ny,   x1-nx, y1-ny,   x2+nx, y2+ny,
       x1-nx, y1-ny,   x2-nx, y2-ny,   x2+nx, y2+ny,
