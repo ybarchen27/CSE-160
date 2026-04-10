@@ -282,7 +282,7 @@ function clearCanvas() {
 }
 
 // ============================================================
-// Draw Picture – Diamond matching hand-drawn sketch exactly
+// Draw Picture – Diamond from sketch
 // ============================================================
 function drawPicture() {
   g_shapesList = [];
@@ -290,70 +290,81 @@ function drawPicture() {
     g_shapesList.push(new Triangle([x1,y1,x2,y2,x3,y3], [r,g,b,a]));
   }
 
-  // Vertices read from the grid-paper sketch:
+  // Vertices mapped from photo:
   //
-  //  FAR_L              TOP_L   PEAK   TOP_R              FAR_R
-  //  (-0.95, 0.30)  (-0.35,0.30) (−0.10,0.70) (0.35,0.30) (0.95,0.30)
+  //        A(-0.05, 0.90)          <- top center peak
   //
-  //  Flat top edge: FAR_L ---- TOP_L -------- TOP_R ---- FAR_R
-  //  (the thick horizontal bar across the top)
+  //  FL(-0.90,0.45) L(-0.30,0.45) .. R(0.30,0.45) FR(0.90,0.45)
+  //  <- flat top bar ->
   //
-  //  Middle bar: ML(-0.35, -0.10)  MR(0.35, -0.10)
-  //  (second thick horizontal line)
+  //  FML(-0.90,0.10) ML(-0.30,0.10) MR(0.30,0.10) FMR(0.90,0.10)
+  //  <- middle horizontal bar ->
   //
-  //  Inner verticals on middle bar: IV_L(-0.35, 0.30) IV_R(0.35, 0.30)
+  //        BL(-0.25,-0.30) BR(0.25,-0.30)   <- bottom bar
   //
-  //  Bottom point: BOT(0.00, -0.75)
+  //        BOT(0.00,-0.75)                  <- bottom tip
 
-  const FAR_L = [-0.95,  0.30];
-  const FAR_R = [ 0.95,  0.30];
-  const TOP_L = [-0.35,  0.30];
-  const TOP_R = [ 0.35,  0.30];
-  const PEAK  = [-0.10,  0.72]; // the apex point slightly left of center
+  const A   = [-0.05,  0.90];  // top peak (slightly left of center)
+  const FL  = [-0.90,  0.45];  // far left top
+  const L   = [-0.30,  0.45];  // left inner top
+  const R   = [ 0.30,  0.45];  // right inner top
+  const FR  = [ 0.90,  0.45];  // far right top
+  const FML = [-0.90,  0.10];  // far left mid
+  const ML  = [-0.30,  0.10];  // left inner mid
+  const MR  = [ 0.30,  0.10];  // right inner mid
+  const FMR = [ 0.90,  0.10];  // far right mid
+  const BL  = [-0.25, -0.30];  // bottom bar left
+  const BR  = [ 0.25, -0.30];  // bottom bar right
+  const BOT = [ 0.00, -0.75];  // bottom tip
 
-  const ML    = [-0.35, -0.10];
-  const MR    = [ 0.35, -0.10];
+  // ======== CROWN ========
 
-  const BOT   = [ 0.00, -0.75];
+  // Far-left wing:  FL → A → L  (top-left outer triangle)
+  tri(...FL, ...A,  ...L,    0.28, 0.52, 0.85);
 
-  // ======= CROWN (above middle line) =======
+  // Far-left side:  FL → L → FML  (left outer trapezoid, split in two)
+  tri(...FL, ...L,  ...FML,  0.20, 0.42, 0.75);
+  tri(...L,  ...ML, ...FML,  0.20, 0.42, 0.75);
 
-  // Far-left wing triangle: FAR_L, PEAK, TOP_L
-  tri(...FAR_L, ...PEAK,  ...TOP_L,   0.25,0.52,0.82);
+  // Left-centre upper:  L → A → ML  (diagonal left-of-centre)
+  tri(...L,  ...A,  ...ML,   0.38, 0.65, 0.92);
 
-  // Far-left lower triangle: FAR_L, TOP_L, ML
-  // (the triangle below the wing, left of the vertical)
-  tri(...FAR_L, ...TOP_L, ...ML,      0.18,0.42,0.72);
+  // Centre upper left:  A → ML → MR  (large bright centre)
+  tri(...A,  ...ML, ...MR,   0.72, 0.88, 0.98);
 
-  // Left-centre upper: TOP_L, PEAK, ML
-  tri(...TOP_L, ...PEAK,  ...ML,      0.40,0.68,0.90);
+  // Centre upper right: A → R → MR
+  tri(...A,  ...R,  ...MR,   0.55, 0.78, 0.95);
 
-  // Centre upper (brightest): PEAK, TOP_R, ML (large centre facet)
-  tri(...PEAK,  ...TOP_R, ...ML,      0.70,0.88,0.98);
+  // Right-centre upper: R → A → MR  (mirror of left-centre)
+  // already covered above, now right outer:
+  tri(...R,  ...FR, ...MR,   0.38, 0.65, 0.92);
 
-  // Centre-right: TOP_R, MR, ML
-  tri(...TOP_R, ...MR,    ...ML,      0.45,0.72,0.92);
+  // Far-right wing:  FR → A → R
+  tri(...FR, ...A,  ...R,    0.28, 0.52, 0.85);
 
-  // Far-right upper: FAR_R, PEAK_R, TOP_R
-  // (mirror of far-left — peak is at top-right corner in sketch)
-  tri(...FAR_R, ...TOP_R, [-0.10, 0.72],  0.25,0.52,0.82);
+  // Far-right side:  FR → R → FMR
+  tri(...FR, ...R,  ...FMR,  0.20, 0.42, 0.75);
+  tri(...R,  ...MR, ...FMR,  0.20, 0.42, 0.75);
 
-  // Far-right lower: FAR_R, TOP_R, MR
-  tri(...FAR_R, ...TOP_R, ...MR,      0.18,0.42,0.72);
+  // ======== PAVILION ========
 
-  // ======= PAVILION (below middle line) =======
+  // Far-left pavilion:  FML → ML → BL  (left outer)
+  tri(...FML, ...ML, ...BL,  0.18, 0.40, 0.72);
+  tri(...FML, ...BL, ...BOT, 0.15, 0.35, 0.65);
 
-  // Left pavilion: ML, BOT, MR — left half
-  tri(...ML,    ...BOT,   ...MR,      0.30,0.60,0.88);
+  // Left-centre pavilion:  ML → BL → BR  + diagonal to BOT
+  tri(...ML, ...BL, ...BR,   0.35, 0.62, 0.90);
+  tri(...ML, ...BR, ...MR,   0.45, 0.72, 0.95);
 
-  // Left outer pavilion: FAR_L-ish edge down to ML and BOT
-  tri(-0.35, -0.10,  -0.95, 0.30,  0.00, -0.75,   0.20,0.48,0.78);
+  // Centre pavilion (bright):  BL → BOT → BR
+  tri(...BL, ...BOT, ...BR,  0.65, 0.85, 0.98);
 
-  // Right outer pavilion
-  tri( 0.35, -0.10,   0.95, 0.30,  0.00, -0.75,   0.20,0.48,0.78);
+  // Right-centre pavilion:  MR → BR → BOT
+  tri(...MR, ...BR, ...BOT,  0.35, 0.62, 0.90);
 
-  // Centre pavilion bright
-  tri(...ML, ...MR, ...BOT,   0.55,0.80,0.97);
+  // Far-right pavilion:  FMR → MR → BOT
+  tri(...FMR, ...MR, ...BR,  0.18, 0.40, 0.72);
+  tri(...FMR, ...BR, ...BOT, 0.15, 0.35, 0.65);
 
   renderAllShapes();
 }
