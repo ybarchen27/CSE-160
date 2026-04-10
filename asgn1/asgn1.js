@@ -282,7 +282,7 @@ function clearCanvas() {
 }
 
 // ============================================================
-// Draw Picture
+// Draw Picture – Diamond gem matching hand-drawn sketch
 // ============================================================
 function drawPicture() {
   g_shapesList = [];
@@ -290,62 +290,71 @@ function drawPicture() {
     g_shapesList.push(new Triangle([x1,y1,x2,y2,x3,y3], [r,g,b,a]));
   }
 
-  // Sky
-  const sky = [[0.20,0.60,0.90],[0.15,0.50,0.85],[0.25,0.65,0.95],[0.10,0.45,0.80]];
-  for (let i = 0; i < 8; i++) {
-    const c = sky[i % sky.length], x = -1 + i * 0.25;
-    tri(x,1.0, x+0.25,1.0, x,0.0, ...c);
-    tri(x+0.25,1.0, x+0.25,0.0, x,0.0, ...c);
-  }
-  // Ground
-  tri(-1,-1, 1,-1, -1,-0.05, 0.15,0.55,0.15);
-  tri( 1,-1, 1,-0.05, -1,-0.05, 0.10,0.45,0.10);
-  // Sun
-  const sx=0.65, sy=0.70, sr=0.18;
-  for (let i = 0; i < 12; i++) {
-    const a1=2*Math.PI*i/12, a2=2*Math.PI*(i+1)/12;
-    tri(sx,sy, sx+sr*Math.cos(a1),sy+sr*Math.sin(a1),
-               sx+sr*Math.cos(a2),sy+sr*Math.sin(a2), 1.0,0.85,0.0);
-  }
-  // Sun glow (transparent)
-  for (let i = 0; i < 12; i++) {
-    const a1=2*Math.PI*i/12, a2=2*Math.PI*(i+1)/12, hr=sr*1.6;
-    tri(sx,sy, sx+hr*Math.cos(a1),sy+hr*Math.sin(a1),
-               sx+hr*Math.cos(a2),sy+hr*Math.sin(a2), 1.0,0.95,0.3, 0.25);
-  }
-  // Left mountain + snow + shadow
-  tri(-0.9,-0.05, -0.45,0.55,  0.0,-0.05, 0.40,0.40,0.45);
-  tri(-0.9,-0.05, -0.45,0.55, -1.0, 0.20, 0.35,0.35,0.40);
-  tri(-0.55,0.40, -0.45,0.55, -0.35,0.40, 0.92,0.95,1.0);
-  tri(-0.9,-0.05, -0.45,0.55, -1.0,0.20,  0.0,0.0,0.1, 0.18);
-  // Right mountain + snow
-  tri(0.10,-0.05, 0.55,0.65, 1.0,-0.05, 0.35,0.40,0.42);
-  tri(0.45,0.50,  0.55,0.65, 0.65,0.50, 0.92,0.95,1.0);
-  // Trees
-  function tree(tx, ty) {
-    tri(tx-0.02,ty-0.18, tx+0.02,ty-0.18, tx-0.02,ty, 0.55,0.27,0.07);
-    tri(tx+0.02,ty-0.18, tx+0.02,ty,      tx-0.02,ty, 0.55,0.27,0.07);
-    tri(tx-0.10,ty,      tx+0.10,ty,       tx,ty+0.20, 0.10,0.55,0.10);
-    tri(tx-0.07,ty+0.12, tx+0.07,ty+0.12, tx,ty+0.28, 0.15,0.65,0.15);
-    tri(tx-0.05,ty+0.22, tx+0.05,ty+0.22, tx,ty+0.35, 0.20,0.75,0.20);
-  }
-  tree(-0.28,-0.05);
-  tree( 0.00,-0.05);
-  // Letter Y
-  tri(-0.82,0.35, -0.70,0.35, -0.62,0.15, 0.95,0.30,0.10);
-  tri(-0.82,0.35, -0.62,0.15, -0.74,0.15, 0.95,0.30,0.10);
-  tri(-0.58,0.35, -0.46,0.35, -0.62,0.15, 0.95,0.30,0.10);
-  tri(-0.58,0.35, -0.62,0.15, -0.50,0.15, 0.95,0.30,0.10);
-  tri(-0.68,0.15, -0.56,0.15, -0.68,-0.02, 0.95,0.30,0.10);
-  tri(-0.56,0.15, -0.56,-0.02,-0.68,-0.02, 0.95,0.30,0.10);
-  // Letter B
-  const bx = 0.20;
-  tri(bx,    0.35, bx+0.10,0.35, bx,    -0.02, 0.20,0.55,0.95);
-  tri(bx+0.10,0.35, bx+0.10,-0.02, bx, -0.02, 0.20,0.55,0.95);
-  tri(bx+0.10,0.35, bx+0.35,0.30, bx+0.10,0.17, 0.20,0.55,0.95);
-  tri(bx+0.35,0.30, bx+0.35,0.17, bx+0.10,0.17, 0.20,0.55,0.95);
-  tri(bx+0.10,0.17, bx+0.38,0.12, bx+0.10,-0.02, 0.20,0.55,0.95);
-  tri(bx+0.38,0.12, bx+0.38,-0.02, bx+0.10,-0.02, 0.20,0.55,0.95);
+  // Key vertices of the gem (clip-space coords):
+  //
+  //  TL(-0.6, 0.7)---TM(-0.1, 0.85)--TC(0.0, 0.85)--TR(0.6, 0.7)
+  //   |                                                        |
+  //  ML(-0.75, 0.3)--BL(-0.3, 0.3)------BR(0.3, 0.3)--MR(0.75, 0.3)
+  //                      \               /
+  //                   BML(-0.3,-0.2) BRM(0.3,-0.2)
+  //                          \       /
+  //                          BOT(0.0,-0.85)
+
+  const TL  = [-0.60,  0.70];
+  const TML = [-0.10,  0.85];
+  const TMR = [ 0.10,  0.85];
+  const TR  = [ 0.60,  0.70];
+
+  const ML  = [-0.75,  0.30];
+  const BL  = [-0.30,  0.30];
+  const BC  = [ 0.00,  0.30];
+  const BR  = [ 0.30,  0.30];
+  const MR  = [ 0.75,  0.30];
+
+  const LB  = [-0.30, -0.20];
+  const RB  = [ 0.30, -0.20];
+
+  const BOT = [ 0.00, -0.85];
+
+  // ---- Top crown facets ----
+  // Far-left facet (darkest)
+  tri(...TL, ...ML,  ...BL,   0.35,0.65,0.90);
+  // Left-of-centre top facet
+  tri(...TL, ...TML, ...BL,   0.55,0.80,0.98);
+  // Centre top (brightest highlight)
+  tri(...TML,...TMR, ...BC,   0.85,0.95,1.00);
+  // Right-of-centre top facet
+  tri(...TR, ...TMR, ...BR,   0.55,0.80,0.98);
+  // Far-right facet (darkest)
+  tri(...TR, ...MR,  ...BR,   0.35,0.65,0.90);
+
+  // Top-left diagonal facet
+  tri(...TML,...BL,  ...BC,   0.45,0.72,0.95);
+  // Top-right diagonal facet
+  tri(...TMR,...BC,  ...BR,   0.45,0.72,0.95);
+
+  // Left wing (extends out past main gem)
+  tri(...TL, ...ML,  [-0.90, 0.50],  0.25,0.50,0.80, 0.85);
+
+  // Right wing
+  tri(...TR, ...MR,  [ 0.90, 0.50],  0.25,0.50,0.80, 0.85);
+
+  // ---- Bottom pavilion facets ----
+  // Left pavilion
+  tri(...BL, ...LB,  ...BOT,  0.20,0.55,0.85);
+  // Left-centre pavilion (lighter)
+  tri(...BL, ...BC,  ...LB,   0.50,0.78,0.97);
+  // Right-centre pavilion (lighter)
+  tri(...BR, ...RB,  ...BC,   0.50,0.78,0.97);
+  // Right pavilion
+  tri(...BR, ...BOT, ...RB,   0.20,0.55,0.85);
+  // Centre bottom (bright)
+  tri(...LB, ...BOT, ...RB,   0.70,0.90,1.00);
+
+  // ---- Outline pass: thin dark triangles drawn over edges ----
+  // These give the pencil-line look from the sketch
+  // (same triangles, black, low alpha so they just darken the edges)
+  const E = 0.012; // edge inset for outline effect – not needed, skip
 
   renderAllShapes();
 }
