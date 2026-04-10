@@ -282,89 +282,77 @@ function clearCanvas() {
 }
 
 // ============================================================
-// Draw Picture – Diamond from sketch
+// Draw Picture – Diamond from sketch, pure triangles, symmetric
 // ============================================================
 function drawPicture() {
   g_shapesList = [];
-  function tri(x1,y1, x2,y2, x3,y3, r,g,b,a=1.0) {
-    g_shapesList.push(new Triangle([x1,y1,x2,y2,x3,y3], [r,g,b,a]));
+  function tri(x1,y1, x2,y2, x3,y3, r,g,b) {
+    g_shapesList.push(new Triangle([x1,y1,x2,y2,x3,y3], [r,g,b,1.0]));
   }
 
-  // Vertices mapped from photo:
+  // All vertices — perfectly symmetric around x=0
   //
-  //        A(-0.05, 0.90)          <- top center peak
+  //                 TOP (0, 0.95)
   //
-  //  FL(-0.90,0.45) L(-0.30,0.45) .. R(0.30,0.45) FR(0.90,0.45)
-  //  <- flat top bar ->
+  //  FL(-0.90,0.30) L(-0.30,0.30)  R(0.30,0.30)  FR(0.90,0.30)
+  //  ←————————— middle bar ——————————————————————→
+  //  FL(-0.90,0.30) L(-0.30,0.30)  R(0.30,0.30)  FR(0.90,0.30)
   //
-  //  FML(-0.90,0.10) ML(-0.30,0.10) MR(0.30,0.10) FMR(0.90,0.10)
-  //  <- middle horizontal bar ->
+  //                BOT (0, -0.95)
   //
-  //        BL(-0.25,-0.30) BR(0.25,-0.30)   <- bottom bar
-  //
-  //        BOT(0.00,-0.75)                  <- bottom tip
+  // The middle bar IS the widest point (diamond shape).
+  // Crown goes UP from it, pavilion goes DOWN from it.
 
-  const A   = [-0.05,  0.90];  // top peak (slightly left of center)
-  const FL  = [-0.90,  0.45];  // far left top
-  const L   = [-0.30,  0.45];  // left inner top
-  const R   = [ 0.30,  0.45];  // right inner top
-  const FR  = [ 0.90,  0.45];  // far right top
-  const FML = [-0.90,  0.10];  // far left mid
-  const ML  = [-0.30,  0.10];  // left inner mid
-  const MR  = [ 0.30,  0.10];  // right inner mid
-  const FMR = [ 0.90,  0.10];  // far right mid
-  const BL  = [-0.25, -0.30];  // bottom bar left
-  const BR  = [ 0.25, -0.30];  // bottom bar right
-  const BOT = [ 0.00, -0.75];  // bottom tip
+  const TOP =  [ 0.00,  0.95];
+  const FL  =  [-0.90,  0.30];
+  const L   =  [-0.30,  0.30];
+  const R   =  [ 0.30,  0.30];
+  const FR  =  [ 0.90,  0.30];
+  const ML  =  [-0.30, -0.30];
+  const MR  =  [ 0.30, -0.30];
+  const FML =  [-0.90, -0.30];
+  const FMR =  [ 0.90, -0.30];
+  const BOT =  [ 0.00, -0.95];
 
-  // ======== CROWN ========
+  // ── CROWN ──────────────────────────────────────────
+  // 1. Far-left triangle:        FL, TOP, L
+  tri(...FL,  ...TOP, ...L,    0.25, 0.45, 0.75);
+  // 2. Left triangle:            L,  TOP, MID_CENTRE
+  //    (from L up to peak, down to centre of mid bar)
+  tri(...L,   ...TOP, 0,0.30,  0.35, 0.58, 0.88);
+  // 3. Centre-left triangle:     TOP, L, R  (the bright top facet)
+  tri(...TOP, ...L,   ...R,    0.65, 0.82, 0.97);
+  // 4. Centre-right triangle:    TOP, R, 0,0.30
+  tri(...TOP, ...R,  0,0.30,   0.35, 0.58, 0.88);
+  // 5. Far-right triangle:       FR, TOP, R
+  tri(...FR,  ...TOP, ...R,    0.25, 0.45, 0.75);
 
-  // Far-left wing:  FL → A → L  (top-left outer triangle)
-  tri(...FL, ...A,  ...L,    0.28, 0.52, 0.85);
+  // ── GIRDLE (the horizontal band between crown and pavilion) ──
+  // Split each trapezoid into 2 triangles
+  // Left band:   FL, L, ML
+  tri(...FL, ...L,  ...ML,   0.20, 0.38, 0.68);
+  // Left band:   FL, ML, FML
+  tri(...FL, ...ML, ...FML,  0.18, 0.34, 0.62);
+  // Centre band: L, R, MR
+  tri(...L,  ...R,  ...MR,   0.30, 0.52, 0.82);
+  // Centre band: L, MR, ML
+  tri(...L,  ...ML, ...MR,   0.28, 0.50, 0.80);
+  // Right band:  R, FR, FMR
+  tri(...R,  ...FR, ...FMR,  0.20, 0.38, 0.68);
+  // Right band:  R, FMR, MR
+  tri(...R,  ...FMR,...MR,   0.18, 0.34, 0.62);
 
-  // Far-left side:  FL → L → FML  (left outer trapezoid, split in two)
-  tri(...FL, ...L,  ...FML,  0.20, 0.42, 0.75);
-  tri(...L,  ...ML, ...FML,  0.20, 0.42, 0.75);
-
-  // Left-centre upper:  L → A → ML  (diagonal left-of-centre)
-  tri(...L,  ...A,  ...ML,   0.38, 0.65, 0.92);
-
-  // Centre upper left:  A → ML → MR  (large bright centre)
-  tri(...A,  ...ML, ...MR,   0.72, 0.88, 0.98);
-
-  // Centre upper right: A → R → MR
-  tri(...A,  ...R,  ...MR,   0.55, 0.78, 0.95);
-
-  // Right-centre upper: R → A → MR  (mirror of left-centre)
-  // already covered above, now right outer:
-  tri(...R,  ...FR, ...MR,   0.38, 0.65, 0.92);
-
-  // Far-right wing:  FR → A → R
-  tri(...FR, ...A,  ...R,    0.28, 0.52, 0.85);
-
-  // Far-right side:  FR → R → FMR
-  tri(...FR, ...R,  ...FMR,  0.20, 0.42, 0.75);
-  tri(...R,  ...MR, ...FMR,  0.20, 0.42, 0.75);
-
-  // ======== PAVILION ========
-
-  // Far-left pavilion:  FML → ML → BL  (left outer)
-  tri(...FML, ...ML, ...BL,  0.18, 0.40, 0.72);
-  tri(...FML, ...BL, ...BOT, 0.15, 0.35, 0.65);
-
-  // Left-centre pavilion:  ML → BL → BR  + diagonal to BOT
-  tri(...ML, ...BL, ...BR,   0.35, 0.62, 0.90);
-  tri(...ML, ...BR, ...MR,   0.45, 0.72, 0.95);
-
-  // Centre pavilion (bright):  BL → BOT → BR
-  tri(...BL, ...BOT, ...BR,  0.65, 0.85, 0.98);
-
-  // Right-centre pavilion:  MR → BR → BOT
-  tri(...MR, ...BR, ...BOT,  0.35, 0.62, 0.90);
-
-  // Far-right pavilion:  FMR → MR → BOT
-  tri(...FMR, ...MR, ...BR,  0.18, 0.40, 0.72);
-  tri(...FMR, ...BR, ...BOT, 0.15, 0.35, 0.65);
+  // ── PAVILION (mirror of crown) ─────────────────────
+  // 1. Far-left:   FML, ML, BOT
+  tri(...FML, ...ML, ...BOT,  0.25, 0.45, 0.75);
+  // 2. Left:       ML, 0,-0.30, BOT
+  tri(...ML,  0,-0.30, ...BOT, 0.35, 0.58, 0.88);
+  // 3. Centre:     ML, MR, BOT  (bright)
+  tri(...ML,  ...MR,  ...BOT,  0.65, 0.82, 0.97);
+  // 4. Right:      MR, 0,-0.30, BOT
+  tri(...MR,  0,-0.30, ...BOT, 0.35, 0.58, 0.88);
+  // 5. Far-right:  FMR, MR, BOT
+  tri(...FMR, ...MR,  ...BOT,  0.25, 0.45, 0.75);
 
   renderAllShapes();
 }
