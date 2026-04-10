@@ -282,7 +282,7 @@ function clearCanvas() {
 }
 
 // ============================================================
-// Draw Picture – Diamond gem matching hand-drawn sketch
+// Draw Picture – Diamond gem
 // ============================================================
 function drawPicture() {
   g_shapesList = [];
@@ -290,71 +290,72 @@ function drawPicture() {
     g_shapesList.push(new Triangle([x1,y1,x2,y2,x3,y3], [r,g,b,a]));
   }
 
-  // Key vertices of the gem (clip-space coords):
+  // Named vertices matching the image layout
   //
-  //  TL(-0.6, 0.7)---TM(-0.1, 0.85)--TC(0.0, 0.85)--TR(0.6, 0.7)
-  //   |                                                        |
-  //  ML(-0.75, 0.3)--BL(-0.3, 0.3)------BR(0.3, 0.3)--MR(0.75, 0.3)
-  //                      \               /
-  //                   BML(-0.3,-0.2) BRM(0.3,-0.2)
-  //                          \       /
-  //                          BOT(0.0,-0.85)
+  //  WL                TL   TML  TMR   TR                WR
+  //  (-1, 0.5)      (-0.5,0.9)  (0,0.95) (0.5,0.9)    (1, 0.5)
+  //
+  //       ML(-0.65,0.3)  CL(-0.2,0.3) CR(0.2,0.3)  MR(0.65,0.3)
+  //
+  //                      IL(-0.2,0.0)  IR(0.2,0.0)
+  //                         (black hole diamond shape)
+  //                      BL(-0.2,-0.25) BR(0.2,-0.25)
+  //
+  //                            BOT(0,-0.95)
 
-  const TL  = [-0.60,  0.70];
-  const TML = [-0.10,  0.85];
-  const TMR = [ 0.10,  0.85];
-  const TR  = [ 0.60,  0.70];
+  // ---- CROWN (top half) ----
 
-  const ML  = [-0.75,  0.30];
-  const BL  = [-0.30,  0.30];
-  const BC  = [ 0.00,  0.30];
-  const BR  = [ 0.30,  0.30];
-  const MR  = [ 0.75,  0.30];
+  // Far-left wing – medium blue
+  tri(-1.00, 0.50,  -0.65, 0.30,  -0.50, 0.90,   0.22,0.53,0.80);
+  tri(-1.00, 0.50,  -0.65, 0.30,  -0.85, 0.15,   0.18,0.45,0.72);
 
-  const LB  = [-0.30, -0.20];
-  const RB  = [ 0.30, -0.20];
+  // Far-right wing – medium blue
+  tri( 1.00, 0.50,   0.65, 0.30,   0.50, 0.90,   0.22,0.53,0.80);
+  tri( 1.00, 0.50,   0.65, 0.30,   0.85, 0.15,   0.18,0.45,0.72);
 
-  const BOT = [ 0.00, -0.85];
+  // Left crown facet (dark blue)
+  tri(-0.50, 0.90,  -0.65, 0.30,  -0.20, 0.30,   0.18,0.45,0.75);
 
-  // ---- Top crown facets ----
-  // Far-left facet (darkest)
-  tri(...TL, ...ML,  ...BL,   0.35,0.65,0.90);
-  // Left-of-centre top facet
-  tri(...TL, ...TML, ...BL,   0.55,0.80,0.98);
-  // Centre top (brightest highlight)
-  tri(...TML,...TMR, ...BC,   0.85,0.95,1.00);
-  // Right-of-centre top facet
-  tri(...TR, ...TMR, ...BR,   0.55,0.80,0.98);
-  // Far-right facet (darkest)
-  tri(...TR, ...MR,  ...BR,   0.35,0.65,0.90);
+  // Left-centre crown facet (medium blue)
+  tri(-0.50, 0.90,  -0.20, 0.30,   0.00, 0.95,   0.30,0.62,0.88);
 
-  // Top-left diagonal facet
-  tri(...TML,...BL,  ...BC,   0.45,0.72,0.95);
-  // Top-right diagonal facet
-  tri(...TMR,...BC,  ...BR,   0.45,0.72,0.95);
+  // Centre top highlight (lightest blue / near white)
+  tri( 0.00, 0.95,  -0.20, 0.30,   0.20, 0.30,   0.72,0.88,0.98);
 
-  // Left wing (extends out past main gem)
-  tri(...TL, ...ML,  [-0.90, 0.50],  0.25,0.50,0.80, 0.85);
+  // Right-centre crown facet (medium blue)
+  tri( 0.50, 0.90,   0.20, 0.30,   0.00, 0.95,   0.30,0.62,0.88);
 
-  // Right wing
-  tri(...TR, ...MR,  [ 0.90, 0.50],  0.25,0.50,0.80, 0.85);
+  // Right crown facet (dark blue)
+  tri( 0.50, 0.90,   0.65, 0.30,   0.20, 0.30,   0.18,0.45,0.75);
 
-  // ---- Bottom pavilion facets ----
-  // Left pavilion
-  tri(...BL, ...LB,  ...BOT,  0.20,0.55,0.85);
-  // Left-centre pavilion (lighter)
-  tri(...BL, ...BC,  ...LB,   0.50,0.78,0.97);
-  // Right-centre pavilion (lighter)
-  tri(...BR, ...RB,  ...BC,   0.50,0.78,0.97);
-  // Right pavilion
-  tri(...BR, ...BOT, ...RB,   0.20,0.55,0.85);
-  // Centre bottom (bright)
-  tri(...LB, ...BOT, ...RB,   0.70,0.90,1.00);
+  // Left girdle bar (darker, horizontal band)
+  tri(-0.65, 0.30,  -0.20, 0.30,  -0.20, 0.00,   0.15,0.38,0.68);
+  tri(-0.65, 0.30,  -0.20, 0.00,  -0.65, 0.00,   0.12,0.32,0.60);
 
-  // ---- Outline pass: thin dark triangles drawn over edges ----
-  // These give the pencil-line look from the sketch
-  // (same triangles, black, low alpha so they just darken the edges)
-  const E = 0.012; // edge inset for outline effect – not needed, skip
+  // Right girdle bar
+  tri( 0.65, 0.30,   0.20, 0.30,   0.20, 0.00,   0.15,0.38,0.68);
+  tri( 0.65, 0.30,   0.20, 0.00,   0.65, 0.00,   0.12,0.32,0.60);
+
+  // ---- BLACK VOID (the dark diamond in the centre) ----
+  tri(-0.20, 0.30,   0.20, 0.30,   0.00, 0.00,   0.0,0.0,0.0);
+  tri(-0.20, 0.00,   0.20, 0.00,   0.00, 0.30,   0.0,0.0,0.0);
+  // Complete the void pentagon
+  tri(-0.20, 0.30,   0.20, 0.30,   0.20, 0.00,   0.04,0.10,0.18);
+  tri(-0.20, 0.30,  -0.20, 0.00,   0.20, 0.00,   0.04,0.10,0.18);
+  // Re-draw void as a proper dark diamond
+  tri( 0.00, 0.32,  -0.22, 0.12,   0.00,-0.08,   0.02,0.05,0.10);
+  tri( 0.00, 0.32,   0.22, 0.12,   0.00,-0.08,   0.02,0.05,0.10);
+
+  // ---- PAVILION (bottom point) ----
+
+  // Left pavilion side (medium-dark blue)
+  tri(-0.65, 0.00,  -0.20, 0.00,   0.00,-0.95,   0.20,0.50,0.80);
+
+  // Centre pavilion (very light blue / pale)
+  tri(-0.20, 0.00,   0.20, 0.00,   0.00,-0.95,   0.68,0.85,0.97);
+
+  // Right pavilion side (medium-dark blue)
+  tri( 0.65, 0.00,   0.20, 0.00,   0.00,-0.95,   0.20,0.50,0.80);
 
   renderAllShapes();
 }
