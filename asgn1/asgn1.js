@@ -282,7 +282,7 @@ function clearCanvas() {
 }
 
 // ============================================================
-// Draw Picture – Diamond gem
+// Draw Picture – Diamond matching hand-drawn sketch exactly
 // ============================================================
 function drawPicture() {
   g_shapesList = [];
@@ -290,72 +290,70 @@ function drawPicture() {
     g_shapesList.push(new Triangle([x1,y1,x2,y2,x3,y3], [r,g,b,a]));
   }
 
-  // Named vertices matching the image layout
+  // Vertices read from the grid-paper sketch:
   //
-  //  WL                TL   TML  TMR   TR                WR
-  //  (-1, 0.5)      (-0.5,0.9)  (0,0.95) (0.5,0.9)    (1, 0.5)
+  //  FAR_L              TOP_L   PEAK   TOP_R              FAR_R
+  //  (-0.95, 0.30)  (-0.35,0.30) (−0.10,0.70) (0.35,0.30) (0.95,0.30)
   //
-  //       ML(-0.65,0.3)  CL(-0.2,0.3) CR(0.2,0.3)  MR(0.65,0.3)
+  //  Flat top edge: FAR_L ---- TOP_L -------- TOP_R ---- FAR_R
+  //  (the thick horizontal bar across the top)
   //
-  //                      IL(-0.2,0.0)  IR(0.2,0.0)
-  //                         (black hole diamond shape)
-  //                      BL(-0.2,-0.25) BR(0.2,-0.25)
+  //  Middle bar: ML(-0.35, -0.10)  MR(0.35, -0.10)
+  //  (second thick horizontal line)
   //
-  //                            BOT(0,-0.95)
+  //  Inner verticals on middle bar: IV_L(-0.35, 0.30) IV_R(0.35, 0.30)
+  //
+  //  Bottom point: BOT(0.00, -0.75)
 
-  // ---- CROWN (top half) ----
+  const FAR_L = [-0.95,  0.30];
+  const FAR_R = [ 0.95,  0.30];
+  const TOP_L = [-0.35,  0.30];
+  const TOP_R = [ 0.35,  0.30];
+  const PEAK  = [-0.10,  0.72]; // the apex point slightly left of center
 
-  // Far-left wing – medium blue
-  tri(-1.00, 0.50,  -0.65, 0.30,  -0.50, 0.90,   0.22,0.53,0.80);
-  tri(-1.00, 0.50,  -0.65, 0.30,  -0.85, 0.15,   0.18,0.45,0.72);
+  const ML    = [-0.35, -0.10];
+  const MR    = [ 0.35, -0.10];
 
-  // Far-right wing – medium blue
-  tri( 1.00, 0.50,   0.65, 0.30,   0.50, 0.90,   0.22,0.53,0.80);
-  tri( 1.00, 0.50,   0.65, 0.30,   0.85, 0.15,   0.18,0.45,0.72);
+  const BOT   = [ 0.00, -0.75];
 
-  // Left crown facet (dark blue)
-  tri(-0.50, 0.90,  -0.65, 0.30,  -0.20, 0.30,   0.18,0.45,0.75);
+  // ======= CROWN (above middle line) =======
 
-  // Left-centre crown facet (medium blue)
-  tri(-0.50, 0.90,  -0.20, 0.30,   0.00, 0.95,   0.30,0.62,0.88);
+  // Far-left wing triangle: FAR_L, PEAK, TOP_L
+  tri(...FAR_L, ...PEAK,  ...TOP_L,   0.25,0.52,0.82);
 
-  // Centre top highlight (lightest blue / near white)
-  tri( 0.00, 0.95,  -0.20, 0.30,   0.20, 0.30,   0.72,0.88,0.98);
+  // Far-left lower triangle: FAR_L, TOP_L, ML
+  // (the triangle below the wing, left of the vertical)
+  tri(...FAR_L, ...TOP_L, ...ML,      0.18,0.42,0.72);
 
-  // Right-centre crown facet (medium blue)
-  tri( 0.50, 0.90,   0.20, 0.30,   0.00, 0.95,   0.30,0.62,0.88);
+  // Left-centre upper: TOP_L, PEAK, ML
+  tri(...TOP_L, ...PEAK,  ...ML,      0.40,0.68,0.90);
 
-  // Right crown facet (dark blue)
-  tri( 0.50, 0.90,   0.65, 0.30,   0.20, 0.30,   0.18,0.45,0.75);
+  // Centre upper (brightest): PEAK, TOP_R, ML (large centre facet)
+  tri(...PEAK,  ...TOP_R, ...ML,      0.70,0.88,0.98);
 
-  // Left girdle bar (darker, horizontal band)
-  tri(-0.65, 0.30,  -0.20, 0.30,  -0.20, 0.00,   0.15,0.38,0.68);
-  tri(-0.65, 0.30,  -0.20, 0.00,  -0.65, 0.00,   0.12,0.32,0.60);
+  // Centre-right: TOP_R, MR, ML
+  tri(...TOP_R, ...MR,    ...ML,      0.45,0.72,0.92);
 
-  // Right girdle bar
-  tri( 0.65, 0.30,   0.20, 0.30,   0.20, 0.00,   0.15,0.38,0.68);
-  tri( 0.65, 0.30,   0.20, 0.00,   0.65, 0.00,   0.12,0.32,0.60);
+  // Far-right upper: FAR_R, PEAK_R, TOP_R
+  // (mirror of far-left — peak is at top-right corner in sketch)
+  tri(...FAR_R, ...TOP_R, [-0.10, 0.72],  0.25,0.52,0.82);
 
-  // ---- BLACK VOID (the dark diamond in the centre) ----
-  tri(-0.20, 0.30,   0.20, 0.30,   0.00, 0.00,   0.0,0.0,0.0);
-  tri(-0.20, 0.00,   0.20, 0.00,   0.00, 0.30,   0.0,0.0,0.0);
-  // Complete the void pentagon
-  tri(-0.20, 0.30,   0.20, 0.30,   0.20, 0.00,   0.04,0.10,0.18);
-  tri(-0.20, 0.30,  -0.20, 0.00,   0.20, 0.00,   0.04,0.10,0.18);
-  // Re-draw void as a proper dark diamond
-  tri( 0.00, 0.32,  -0.22, 0.12,   0.00,-0.08,   0.02,0.05,0.10);
-  tri( 0.00, 0.32,   0.22, 0.12,   0.00,-0.08,   0.02,0.05,0.10);
+  // Far-right lower: FAR_R, TOP_R, MR
+  tri(...FAR_R, ...TOP_R, ...MR,      0.18,0.42,0.72);
 
-  // ---- PAVILION (bottom point) ----
+  // ======= PAVILION (below middle line) =======
 
-  // Left pavilion side (medium-dark blue)
-  tri(-0.65, 0.00,  -0.20, 0.00,   0.00,-0.95,   0.20,0.50,0.80);
+  // Left pavilion: ML, BOT, MR — left half
+  tri(...ML,    ...BOT,   ...MR,      0.30,0.60,0.88);
 
-  // Centre pavilion (very light blue / pale)
-  tri(-0.20, 0.00,   0.20, 0.00,   0.00,-0.95,   0.68,0.85,0.97);
+  // Left outer pavilion: FAR_L-ish edge down to ML and BOT
+  tri(-0.35, -0.10,  -0.95, 0.30,  0.00, -0.75,   0.20,0.48,0.78);
 
-  // Right pavilion side (medium-dark blue)
-  tri( 0.65, 0.00,   0.20, 0.00,   0.00,-0.95,   0.20,0.50,0.80);
+  // Right outer pavilion
+  tri( 0.35, -0.10,   0.95, 0.30,  0.00, -0.75,   0.20,0.48,0.78);
+
+  // Centre pavilion bright
+  tri(...ML, ...MR, ...BOT,   0.55,0.80,0.97);
 
   renderAllShapes();
 }
