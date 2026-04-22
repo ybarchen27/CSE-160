@@ -83,67 +83,29 @@
   </style>
 </head>
 <body>
-
   <div id="controls">
-    <h3>Painting</h3>
+    <h3>Bunny Controls</h3>
 
-    <div class="section">
-      <label>Shape</label>
-      <button id="btn_paint"    class="active" onclick="setShape('paint')">🖌 Paint Brush</button>
-      <button id="btn_point"                   onclick="setShape('point')">Point</button>
-      <button id="btn_triangle"                onclick="setShape('triangle')">Triangle</button>
-      <button id="btn_circle"                  onclick="setShape('circle')">Circle</button>
-    </div>
+    <label>Global Y Rotation: <span id="yRotVal">0</span></label>
+    <input type="range" id="yRotSlider" min="-180" max="180" value="0"
+      oninput="g_angleY=+this.value; document.getElementById('yRotVal').textContent=this.value; renderScene();">
 
-    <div class="section">
-      <label>Size: <span id="sizeVal">20</span></label>
-      <input type="range" id="sizeSlider" min="2" max="120" value="20"
-             oninput="g_size=+this.value; document.getElementById('sizeVal').textContent=this.value;">
-    </div>
+    <label>Global X Rotation: <span id="xRotVal">30</span></label>
+    <input type="range" id="xRotSlider" min="-90" max="90" value="30"
+      oninput="g_angleX=+this.value; document.getElementById('xRotVal').textContent=this.value; renderScene();">
 
-    <div class="section">
-      <label>Segments: <span id="segVal">10</span></label>
-      <input type="range" id="segSlider" min="3" max="64" value="10"
-             oninput="g_segments=+this.value; document.getElementById('segVal').textContent=this.value;">
-    </div>
+    <label>Ear 1 Angle: <span id="ear1Val">0</span></label>
+    <input type="range" id="ear1Slider" min="-45" max="45" value="0"
+      oninput="g_ear1Angle=+this.value; document.getElementById('ear1Val').textContent=this.value; renderScene();">
 
-    <div class="section">
-      <label>Color</label>
-      <div class="row">
-        <span class="lbl" style="color:#c00">R</span>
-        <input type="range" id="rSlider" min="0" max="255" value="255" oninput="updateColor()">
-        <span class="val" id="rVal">255</span>
-      </div>
-      <div class="row">
-        <span class="lbl" style="color:#090">G</span>
-        <input type="range" id="gSlider" min="0" max="255" value="0" oninput="updateColor()">
-        <span class="val" id="gVal">0</span>
-      </div>
-      <div class="row">
-        <span class="lbl" style="color:#00c">B</span>
-        <input type="range" id="bSlider" min="0" max="255" value="0" oninput="updateColor()">
-        <span class="val" id="bVal">0</span>
-      </div>
-      <div class="row">
-        <span class="lbl" style="color:#888">A</span>
-        <input type="range" id="aSlider" min="1" max="255" value="220" oninput="updateColor()">
-        <span class="val" id="aVal">220</span>
-      </div>
-      <div id="colorBox" style="background:rgba(255,0,0,0.86);"></div>
-      <div class="note">Low A = transparent / watercolour</div>
-    </div>
+    <label>Ear 2 Angle: <span id="ear2Val">0</span></label>
+    <input type="range" id="ear2Slider" min="-45" max="45" value="0"
+      oninput="g_ear2Angle=+this.value; document.getElementById('ear2Val').textContent=this.value; renderScene();">
 
-    <div class="section">
-      <button id="clearBtn" onclick="clearCanvas()">Clear</button>
-    </div>
-
-    <div class="section">
-      <button id="drawPicBtn" onclick="drawPicture()">Draw Picture</button>
-    </div>
+    <button onclick="toggleAnimation()">Toggle Animation</button>
   </div>
 
   <canvas id="webgl" width="400" height="400"></canvas>
-
   <script src="asgn2.js"></script>
 </body>
 </html>
