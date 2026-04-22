@@ -1,5 +1,10 @@
 // CSE 160 – Assignment 2: Blocky 3D Animal
 
+let g_ear1Angle = 0;
+let g_ear2Angle = 0;
+let g_animating = false;
+let g_time = 0;
+
 const VSHADER_SOURCE = `
   attribute vec4 a_Position;
   uniform mat4 u_ModelMatrix;
@@ -176,10 +181,107 @@ function renderScene() {
 // ── Animal ────────────────────────────────────────────────────
 // One cube for now — add body parts here.
 function drawAnimal() {
+  // ── Body ──────────────────────────────────────────────────
   const body = new Cube();
-  body.color = [0.6, 0.4, 0.2, 1];
-  body.matrix.setIdentity();
+  body.color = [0.85, 0.85, 0.85, 1];
+  body.matrix.setIdentity().scale(0.5, 0.4, 0.35);
   body.render();
+
+  // ── Head ──────────────────────────────────────────────────
+  const head = new Cube();
+  head.color = [0.85, 0.85, 0.85, 1];
+  head.matrix.setIdentity().translate(0, 0.3, 0.15).scale(0.3, 0.28, 0.28);
+  head.render();
+
+  // ── Left Ear (base) ───────────────────────────────────────
+  const earLBase = new Cube();
+  earLBase.color = [0.85, 0.85, 0.85, 1];
+  earLBase.matrix.setIdentity()
+    .translate(-0.08, 0.45, 0.15)
+    .rotate(g_ear1Angle, 0, 0, 1)
+    .scale(0.07, 0.2, 0.07);
+  earLBase.render();
+
+  // ── Left Ear (mid) ────────────────────────────────────────
+  const earLMid = new Cube();
+  earLMid.color = [0.9, 0.75, 0.75, 1];
+  earLMid.matrix.setIdentity()
+    .translate(-0.08, 0.45, 0.15)
+    .rotate(g_ear1Angle, 0, 0, 1)
+    .translate(0, 0.2, 0)
+    .rotate(g_ear2Angle, 0, 0, 1)
+    .scale(0.055, 0.18, 0.055);
+  earLMid.render();
+
+  // ── Left Ear (tip) — 3rd level ────────────────────────────
+  const earLTip = new Cube();
+  earLTip.color = [0.95, 0.7, 0.7, 1];
+  earLTip.matrix.setIdentity()
+    .translate(-0.08, 0.45, 0.15)
+    .rotate(g_ear1Angle, 0, 0, 1)
+    .translate(0, 0.2, 0)
+    .rotate(g_ear2Angle, 0, 0, 1)
+    .translate(0, 0.18, 0)
+    .scale(0.04, 0.1, 0.04);
+  earLTip.render();
+
+  // ── Right Ear (mirrors left, uses same angles) ─────────────
+  const earRBase = new Cube();
+  earRBase.color = [0.85, 0.85, 0.85, 1];
+  earRBase.matrix.setIdentity()
+    .translate(0.08, 0.45, 0.15)
+    .rotate(-g_ear1Angle, 0, 0, 1)
+    .scale(0.07, 0.2, 0.07);
+  earRBase.render();
+
+  const earRMid = new Cube();
+  earRMid.color = [0.9, 0.75, 0.75, 1];
+  earRMid.matrix.setIdentity()
+    .translate(0.08, 0.45, 0.15)
+    .rotate(-g_ear1Angle, 0, 0, 1)
+    .translate(0, 0.2, 0)
+    .rotate(-g_ear2Angle, 0, 0, 1)
+    .scale(0.055, 0.18, 0.055);
+  earRMid.render();
+
+  const earRTip = new Cube();
+  earRTip.color = [0.95, 0.7, 0.7, 1];
+  earRTip.matrix.setIdentity()
+    .translate(0.08, 0.45, 0.15)
+    .rotate(-g_ear1Angle, 0, 0, 1)
+    .translate(0, 0.2, 0)
+    .rotate(-g_ear2Angle, 0, 0, 1)
+    .translate(0, 0.18, 0)
+    .scale(0.04, 0.1, 0.04);
+  earRTip.render();
+
+  // ── Front Legs ────────────────────────────────────────────
+  const frontLegL = new Cube();
+  frontLegL.color = [0.8, 0.8, 0.8, 1];
+  frontLegL.matrix.setIdentity().translate(-0.2, -0.25, 0.12).scale(0.1, 0.2, 0.1);
+  frontLegL.render();
+
+  const frontLegR = new Cube();
+  frontLegR.color = [0.8, 0.8, 0.8, 1];
+  frontLegR.matrix.setIdentity().translate(0.2, -0.25, 0.12).scale(0.1, 0.2, 0.1);
+  frontLegR.render();
+
+  // ── Back Legs ─────────────────────────────────────────────
+  const backLegL = new Cube();
+  backLegL.color = [0.8, 0.8, 0.8, 1];
+  backLegL.matrix.setIdentity().translate(-0.2, -0.25, -0.12).scale(0.1, 0.2, 0.13);
+  backLegL.render();
+
+  const backLegR = new Cube();
+  backLegR.color = [0.8, 0.8, 0.8, 1];
+  backLegR.matrix.setIdentity().translate(0.2, -0.25, -0.12).scale(0.1, 0.2, 0.13);
+  backLegR.render();
+
+  // ── Tail ──────────────────────────────────────────────────
+  const tail = new Cube();
+  tail.color = [1, 1, 1, 1];
+  tail.matrix.setIdentity().translate(0, -0.05, -0.22).scale(0.12, 0.12, 0.12);
+  tail.render();
 }
 
 // ── UI callbacks (kept for HTML compatibility) ─────────────────
@@ -232,6 +334,22 @@ function compileShader(gl, type, src) {
     gl.deleteShader(sh); return null;
   }
   return sh;
+}
+
+function updateAnimationAngles() {
+  g_ear1Angle = 20 * Math.sin(g_time * 2);
+  g_ear2Angle = 15 * Math.sin(g_time * 2 + 1);
+}
+
+function tick(timestamp) {
+  g_time = timestamp / 1000;
+  if (g_animating) updateAnimationAngles();
+  renderScene();
+  requestAnimationFrame(tick);
+}
+
+function toggleAnimation() {
+  g_animating = !g_animating;
 }
 
 // ── Main ──────────────────────────────────────────────────────
