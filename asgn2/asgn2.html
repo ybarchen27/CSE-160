@@ -107,6 +107,9 @@
       oninput="g_ear3Angle=+this.value; document.getElementById('ear3Val').textContent=this.value; renderScene();">
 
     <button onclick="toggleAnimation()">Toggle Animation</button>
+
+    <div id="fpsDisplay" style="font-weight:bold; color:green;">FPS: --</div>
+    <div class="note">Shift+click canvas for alt animation</div>
   </div>
 
   <canvas id="webgl" width="400" height="400"></canvas>

@@ -2,8 +2,13 @@
 
 let g_ear1Angle = 0;
 let g_ear2Angle = 0;
+let g_ear3Angle = 0;
 let g_legAngle = 0;
+
+let g_shiftAnim = false;
+let g_lastTime = 0;
 let g_time = 0;
+let g_fps = 0;
 
 let g_animating = false;
 
@@ -262,6 +267,7 @@ function drawAnimal() {
     .translate(0, 0.2, 0)
     .rotate(g_ear2Angle, 0, 0, 1)
     .translate(0, 0.18, 0)
+    .rotate(g_ear3Angle, 0, 0, 1)
     .scale(0.04, 0.1, 0.04);
   earLTip.render();
 
@@ -292,6 +298,7 @@ function drawAnimal() {
     .translate(0, 0.2, 0)
     .rotate(-g_ear2Angle, 0, 0, 1)
     .translate(0, 0.18, 0)
+    .rotate(-g_ear3Angle, 0, 0, 1)
     .scale(0.04, 0.1, 0.04);
   earRTip.render();
 
@@ -393,12 +400,29 @@ function compileShader(gl, type, src) {
 }
 
 function updateAnimationAngles() {
-  g_ear1Angle = 20 * Math.sin(g_time * 2);
-  g_ear2Angle = 15 * Math.sin(g_time * 2 + 1);
-  g_legAngle  = 15 * Math.sin(g_time * 3);
+  if (g_shiftAnim) {
+    // Shift-click animation: ears go crazy, legs still
+    g_ear1Angle = 40 * Math.sin(g_time * 5);
+    g_ear2Angle = 35 * Math.sin(g_time * 7);
+    g_ear3Angle = 30 * Math.sin(g_time * 9);
+    g_legAngle  = 0;
+  } else {
+    g_ear1Angle = 20 * Math.sin(g_time * 2);
+    g_ear2Angle = 15 * Math.sin(g_time * 2 + 1);
+    g_ear3Angle = 10 * Math.sin(g_time * 2 + 2);
+    g_legAngle  = 15 * Math.sin(g_time * 3);
+  }
 }
 
 function tick(timestamp) {
+  // FPS
+  if (g_lastTime !== 0) {
+    g_fps = Math.round(1000 / (timestamp - g_lastTime));
+    const el = document.getElementById('fpsDisplay');
+    if (el) el.textContent = 'FPS: ' + g_fps;
+  }
+  g_lastTime = timestamp;
+
   g_time = timestamp / 1000;
   if (g_animating) updateAnimationAngles();
   renderScene();
@@ -407,12 +431,23 @@ function tick(timestamp) {
 
 function toggleAnimation() {
   g_animating = !g_animating;
+  g_shiftAnim = false;
+}
+
+function addShiftClickHandler() {
+  canvas.addEventListener('click', ev => {
+    if (ev.shiftKey) {
+      g_animating = true;
+      g_shiftAnim = !g_shiftAnim;
+    }
+  });
 }
 
 // ── Main ──────────────────────────────────────────────────────
 function main() {
   if (!setupWebGL()) return;
   if (!connectVariablesToGLSL()) return;
+  addShiftClickHandler();
   initCubeBuffer();
   initSphereBuffer();
   addMouseHandlers();
