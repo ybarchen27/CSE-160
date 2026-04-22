@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Assignment 2: Painting</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: Arial, sans-serif;
+      font-size: 13px;
+      background: #f0f0f0;
+      display: flex;
+      justify-content: center;
+      align-items: flex-start;
+      padding: 10px;
+      gap: 10px;
+    }
+
+    /* ---- Left control panel ---- */
+    #controls {
+      width: 160px;
+      background: #ddd;
+      border: 1px solid #aaa;
+      padding: 8px;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    #controls h3 {
+      font-size: 13px;
+      text-align: center;
+      border-bottom: 1px solid #aaa;
+      padding-bottom: 4px;
+    }
+    .section { display: flex; flex-direction: column; gap: 4px; }
+    .section > label { font-weight: bold; }
+    .row { display: flex; align-items: center; gap: 4px; }
+    .row .lbl { width: 14px; font-weight: bold; flex-shrink: 0; }
+    .row input[type=range] { flex: 1; min-width: 0; }
+    .row .val { width: 24px; text-align: right; flex-shrink: 0; }
+
+    button {
+      width: 100%;
+      padding: 4px;
+      font-size: 12px;
+      cursor: pointer;
+      background: #eee;
+      border: 1px solid #999;
+    }
+    button.active {
+      background: #aad4f5;
+      border-color: #555;
+      font-weight: bold;
+    }
+    button:hover { background: #ccc; }
+    button.active:hover { background: #88c0e8; }
+
+    #btn_paint { background: #e8f5e9; }
+    #btn_paint.active { background: #66bb6a; color: #fff; border-color: #388e3c; }
+
+    #clearBtn { background: #fcc; border-color: #999; }
+    #clearBtn:hover { background: #f88; }
+
+    #colorBox {
+      height: 20px;
+      border: 1px solid #888;
+      margin-top: 2px;
+    }
+
+    canvas {
+      border: 1px solid #999;
+      display: block;
+      background: #000;
+      cursor: crosshair;
+    }
+
+    .note {
+      font-size: 10px;
+      color: #777;
+      text-align: center;
+      line-height: 1.4;
+    }
+  </style>
+</head>
+<body>
+
+  <div id="controls">
+    <h3>Painting</h3>
+
+    <div class="section">
+      <label>Shape</label>
+      <button id="btn_paint"    class="active" onclick="setShape('paint')">🖌 Paint Brush</button>
+      <button id="btn_point"                   onclick="setShape('point')">Point</button>
+      <button id="btn_triangle"                onclick="setShape('triangle')">Triangle</button>
+      <button id="btn_circle"                  onclick="setShape('circle')">Circle</button>
+    </div>
+
+    <div class="section">
+      <label>Size: <span id="sizeVal">20</span></label>
+      <input type="range" id="sizeSlider" min="2" max="120" value="20"
+             oninput="g_size=+this.value; document.getElementById('sizeVal').textContent=this.value;">
+    </div>
+
+    <div class="section">
+      <label>Segments: <span id="segVal">10</span></label>
+      <input type="range" id="segSlider" min="3" max="64" value="10"
+             oninput="g_segments=+this.value; document.getElementById('segVal').textContent=this.value;">
+    </div>
+
+    <div class="section">
+      <label>Color</label>
+      <div class="row">
+        <span class="lbl" style="color:#c00">R</span>
+        <input type="range" id="rSlider" min="0" max="255" value="255" oninput="updateColor()">
+        <span class="val" id="rVal">255</span>
+      </div>
+      <div class="row">
+        <span class="lbl" style="color:#090">G</span>
+        <input type="range" id="gSlider" min="0" max="255" value="0" oninput="updateColor()">
+        <span class="val" id="gVal">0</span>
+      </div>
+      <div class="row">
+        <span class="lbl" style="color:#00c">B</span>
+        <input type="range" id="bSlider" min="0" max="255" value="0" oninput="updateColor()">
+        <span class="val" id="bVal">0</span>
+      </div>
+      <div class="row">
+        <span class="lbl" style="color:#888">A</span>
+        <input type="range" id="aSlider" min="1" max="255" value="220" oninput="updateColor()">
+        <span class="val" id="aVal">220</span>
+      </div>
+      <div id="colorBox" style="background:rgba(255,0,0,0.86);"></div>
+      <div class="note">Low A = transparent / watercolour</div>
+    </div>
+
+    <div class="section">
+      <button id="clearBtn" onclick="clearCanvas()">Clear</button>
+    </div>
+
+    <div class="section">
+      <button id="drawPicBtn" onclick="drawPicture()">Draw Picture</button>
+    </div>
+  </div>
+
+  <canvas id="webgl" width="400" height="400"></canvas>
+
+  <script src="asgn2.js"></script>
+</body>
+</html>
