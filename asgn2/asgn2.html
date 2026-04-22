@@ -102,6 +102,10 @@
     <input type="range" id="ear2Slider" min="-45" max="45" value="0"
       oninput="g_ear2Angle=+this.value; document.getElementById('ear2Val').textContent=this.value; renderScene();">
 
+    <label>Ear Tip Angle: <span id="ear3Val">0</span></label>
+    <input type="range" id="ear3Slider" min="-45" max="45" value="0"
+      oninput="g_ear3Angle=+this.value; document.getElementById('ear3Val').textContent=this.value; renderScene();">
+
     <button onclick="toggleAnimation()">Toggle Animation</button>
   </div>
 
