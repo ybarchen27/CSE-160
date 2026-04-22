@@ -335,7 +335,7 @@ function drawAnimal() {
 
   // ── Tail (sphere) ─────────────────────────────────────────
   const tailM = new Matrix4();
-  tailM.setIdentity().translate(0, 0.0, -0.25).scale(0.15, 0.15, 0.15);
+  tailM.setIdentity().translate(0, -0.05, -0.22).scale(0.1, 0.1, 0.1);;
   gl.uniformMatrix4fv(u_ModelMatrix, false, tailM.elements);
   drawSphere([1, 1, 1, 1]);
 }
