@@ -432,6 +432,13 @@ function tick(timestamp) {
 function toggleAnimation() {
   g_animating = !g_animating;
   g_shiftAnim = false;
+  if (!g_animating) {
+    // restore slider values when animation turns off
+    g_ear1Angle = +document.getElementById('ear1Slider').value;
+    g_ear2Angle = +document.getElementById('ear2Slider').value;
+    g_ear3Angle = +document.getElementById('ear3Slider').value;
+    g_legAngle  = 0;
+  }
 }
 
 function addShiftClickHandler() {
