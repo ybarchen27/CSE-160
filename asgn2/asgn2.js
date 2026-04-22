@@ -413,6 +413,7 @@ function main() {
   if (!setupWebGL()) return;
   if (!connectVariablesToGLSL()) return;
   initCubeBuffer();
+  initSphereBuffer();
   addMouseHandlers();
   requestAnimationFrame(tick);
 }
