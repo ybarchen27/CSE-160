@@ -260,23 +260,39 @@ function drawAnimal() {
   // ── Front Legs ────────────────────────────────────────────
   const frontLegL = new Cube();
   frontLegL.color = [0.8, 0.8, 0.8, 1];
-  frontLegL.matrix.setIdentity().translate(-0.2, -0.25, 0.12).scale(0.1, 0.2, 0.1);
+  frontLegL.matrix.setIdentity()
+    .translate(-0.2, -0.15, 0.12)
+    .rotate(g_legAngle, 1, 0, 0)
+    .translate(0, -0.1, 0)
+    .scale(0.1, 0.2, 0.1);
   frontLegL.render();
 
   const frontLegR = new Cube();
   frontLegR.color = [0.8, 0.8, 0.8, 1];
-  frontLegR.matrix.setIdentity().translate(0.2, -0.25, 0.12).scale(0.1, 0.2, 0.1);
+  frontLegR.matrix.setIdentity()
+    .translate(0.2, -0.15, 0.12)
+    .rotate(g_legAngle, 1, 0, 0)
+    .translate(0, -0.1, 0)
+    .scale(0.1, 0.2, 0.1);
   frontLegR.render();
 
   // ── Back Legs ─────────────────────────────────────────────
   const backLegL = new Cube();
   backLegL.color = [0.8, 0.8, 0.8, 1];
-  backLegL.matrix.setIdentity().translate(-0.2, -0.25, -0.12).scale(0.1, 0.2, 0.13);
+  backLegL.matrix.setIdentity()
+    .translate(-0.2, -0.15, -0.12)
+    .rotate(-g_legAngle, 1, 0, 0)
+    .translate(0, -0.1, 0)
+    .scale(0.1, 0.2, 0.13);
   backLegL.render();
 
   const backLegR = new Cube();
   backLegR.color = [0.8, 0.8, 0.8, 1];
-  backLegR.matrix.setIdentity().translate(0.2, -0.25, -0.12).scale(0.1, 0.2, 0.13);
+  backLegR.matrix.setIdentity()
+    .translate(0.2, -0.15, -0.12)
+    .rotate(-g_legAngle, 1, 0, 0)
+    .translate(0, -0.1, 0)
+    .scale(0.1, 0.2, 0.13);
   backLegR.render();
 
   // ── Tail ──────────────────────────────────────────────────
