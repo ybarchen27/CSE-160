@@ -161,6 +161,7 @@ let g_sphereBuffer = null;
 let g_sphereVertCount = 0;
 
 function initSphereBuffer() {
+  console.log("initSphere called");
   const verts = [];
   const stacks = 8, slices = 8;
   for (let i = 0; i < stacks; i++) {
