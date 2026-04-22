@@ -2,8 +2,10 @@
 
 let g_ear1Angle = 0;
 let g_ear2Angle = 0;
-let g_animating = false;
+let g_legAngle = 0;
 let g_time = 0;
+
+let g_animating = false;
 
 const VSHADER_SOURCE = `
   attribute vec4 a_Position;
@@ -339,6 +341,7 @@ function compileShader(gl, type, src) {
 function updateAnimationAngles() {
   g_ear1Angle = 20 * Math.sin(g_time * 2);
   g_ear2Angle = 15 * Math.sin(g_time * 2 + 1);
+  g_legAngle  = 15 * Math.sin(g_time * 3);
 }
 
 function tick(timestamp) {
