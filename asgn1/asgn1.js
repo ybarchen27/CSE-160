@@ -282,78 +282,67 @@ function clearCanvas() {
 }
 
 // ============================================================
-// Draw Picture – Diamond matching hand-drawn sketch exactly
+// Draw Picture – Diamond, symmetric, pure triangles
 // ============================================================
 function drawPicture() {
   g_shapesList = [];
-  function tri(x1,y1, x2,y2, x3,y3, r,g,b,a=1.0) {
-    g_shapesList.push(new Triangle([x1,y1,x2,y2,x3,y3], [r,g,b,a]));
+  function tri(x1,y1, x2,y2, x3,y3, r,g,b) {
+    g_shapesList.push(new Triangle([x1,y1,x2,y2,x3,y3], [r,g,b,1.0]));
   }
 
-  // Vertices read from the grid-paper sketch:
+  // Perfectly symmetric layout:
   //
-  //  FAR_L              TOP_L   PEAK   TOP_R              FAR_R
-  //  (-0.95, 0.30)  (-0.35,0.30) (−0.10,0.70) (0.35,0.30) (0.95,0.30)
+  //              TOP(0, 0.55)       ← lowered peak
   //
-  //  Flat top edge: FAR_L ---- TOP_L -------- TOP_R ---- FAR_R
-  //  (the thick horizontal bar across the top)
+  //  FL(-0.90,0.20) L(-0.30,0.20)  R(0.30,0.20)  FR(0.90,0.20)
+  //  ←—————————— widest bar (y=0.20 top, y=-0.20 bottom) ——————→
+  //  FL(-0.90,-0.20) L(-0.30,-0.20) R(0.30,-0.20) FR(0.90,-0.20)
   //
-  //  Middle bar: ML(-0.35, -0.10)  MR(0.35, -0.10)
-  //  (second thick horizontal line)
-  //
-  //  Inner verticals on middle bar: IV_L(-0.35, 0.30) IV_R(0.35, 0.30)
-  //
-  //  Bottom point: BOT(0.00, -0.75)
+  //              BOT(0,-0.55)       ← mirrored bottom
 
-  const FAR_L = [-0.95,  0.30];
-  const FAR_R = [ 0.95,  0.30];
-  const TOP_L = [-0.35,  0.30];
-  const TOP_R = [ 0.35,  0.30];
-  const PEAK  = [-0.10,  0.72]; // the apex point slightly left of center
+  // Crown y-level: top bar at 0.20, peak at 0.55
+  // Pavilion y-level: bottom bar at -0.20, tip at -0.55
+  // Girdle: two rows of triangles between y=0.20 and y=-0.20
 
-  const ML    = [-0.35, -0.10];
-  const MR    = [ 0.35, -0.10];
+  const TOP =  [ 0.00,  0.55];
 
-  const BOT   = [ 0.00, -0.75];
+  const FL  =  [-0.90,  0.20];
+  const L   =  [-0.30,  0.20];
+  const R   =  [ 0.30,  0.20];
+  const FR  =  [ 0.90,  0.20];
 
-  // ======= CROWN (above middle line) =======
+  // Girdle bottom edge (mirror of top edge)
+  const FLB =  [-0.90, -0.20];
+  const LB  =  [-0.30, -0.20];
+  const RB  =  [ 0.30, -0.20];
+  const FRB =  [ 0.90, -0.20];
 
-  // Far-left wing triangle: FAR_L, PEAK, TOP_L
-  tri(...FAR_L, ...PEAK,  ...TOP_L,   0.25,0.52,0.82);
+  const BOT =  [ 0.00, -0.55];
 
-  // Far-left lower triangle: FAR_L, TOP_L, ML
-  // (the triangle below the wing, left of the vertical)
-  tri(...FAR_L, ...TOP_L, ...ML,      0.18,0.42,0.72);
+  // ── CROWN (5 triangles) ──────────────────────────
+  tri(...FL,  ...TOP, ...L,    0.22, 0.44, 0.76); // far-left
+  tri(...L,   ...TOP, 0,0.20,  0.32, 0.56, 0.86); // left-centre
+  tri(...TOP, ...L,   ...R,    0.62, 0.80, 0.96); // centre highlight
+  tri(...R,   ...TOP, 0,0.20,  0.32, 0.56, 0.86); // right-centre
+  tri(...FR,  ...TOP, ...R,    0.22, 0.44, 0.76); // far-right
 
-  // Left-centre upper: TOP_L, PEAK, ML
-  tri(...TOP_L, ...PEAK,  ...ML,      0.40,0.68,0.90);
+  // ── GIRDLE (each side = 2 triangles, no quads) ───
+  // Left outer band
+  tri(...FL,  ...L,   ...LB,   0.18, 0.36, 0.65); // tri 1
+  tri(...FL,  ...LB,  ...FLB,  0.18, 0.36, 0.65); // tri 2
+  // Centre band
+  tri(...L,   ...R,   ...RB,   0.28, 0.50, 0.80); // tri 1
+  tri(...L,   ...RB,  ...LB,   0.28, 0.50, 0.80); // tri 2
+  // Right outer band
+  tri(...R,   ...FR,  ...FRB,  0.18, 0.36, 0.65); // tri 1
+  tri(...R,   ...FRB, ...RB,   0.18, 0.36, 0.65); // tri 2
 
-  // Centre upper (brightest): PEAK, TOP_R, ML (large centre facet)
-  tri(...PEAK,  ...TOP_R, ...ML,      0.70,0.88,0.98);
-
-  // Centre-right: TOP_R, MR, ML
-  tri(...TOP_R, ...MR,    ...ML,      0.45,0.72,0.92);
-
-  // Far-right upper: FAR_R, PEAK_R, TOP_R
-  // (mirror of far-left — peak is at top-right corner in sketch)
-  tri(...FAR_R, ...TOP_R, [-0.10, 0.72],  0.25,0.52,0.82);
-
-  // Far-right lower: FAR_R, TOP_R, MR
-  tri(...FAR_R, ...TOP_R, ...MR,      0.18,0.42,0.72);
-
-  // ======= PAVILION (below middle line) =======
-
-  // Left pavilion: ML, BOT, MR — left half
-  tri(...ML,    ...BOT,   ...MR,      0.30,0.60,0.88);
-
-  // Left outer pavilion: FAR_L-ish edge down to ML and BOT
-  tri(-0.35, -0.10,  -0.95, 0.30,  0.00, -0.75,   0.20,0.48,0.78);
-
-  // Right outer pavilion
-  tri( 0.35, -0.10,   0.95, 0.30,  0.00, -0.75,   0.20,0.48,0.78);
-
-  // Centre pavilion bright
-  tri(...ML, ...MR, ...BOT,   0.55,0.80,0.97);
+  // ── PAVILION (exact mirror of crown) ─────────────
+  tri(...FLB, ...BOT, ...LB,   0.22, 0.44, 0.76); // far-left
+  tri(...LB,  ...BOT, 0,-0.20, 0.32, 0.56, 0.86); // left-centre
+  tri(...BOT, ...LB,  ...RB,   0.62, 0.80, 0.96); // centre highlight
+  tri(...RB,  ...BOT, 0,-0.20, 0.32, 0.56, 0.86); // right-centre
+  tri(...FRB, ...BOT, ...RB,   0.22, 0.44, 0.76); // far-right
 
   renderAllShapes();
 }
