@@ -358,7 +358,7 @@ function main() {
   if (!connectVariablesToGLSL()) return;
   initCubeBuffer();
   addMouseHandlers();
-  renderScene();
+  requestAnimationFrame(tick);
 }
 
 window.onload = main;
