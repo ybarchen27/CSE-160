@@ -156,6 +156,43 @@ function drawCube(rgba) {
   gl.drawArrays(gl.TRIANGLES, 0, 36);
 }
 
+// ── Sphere geometry ───────────────────────────────────────────
+let g_sphereBuffer = null;
+let g_sphereVertCount = 0;
+
+function initSphereBuffer() {
+  const verts = [];
+  const stacks = 8, slices = 8;
+  for (let i = 0; i < stacks; i++) {
+    const phi1 = (i / stacks) * Math.PI;
+    const phi2 = ((i + 1) / stacks) * Math.PI;
+    for (let j = 0; j < slices; j++) {
+      const theta1 = (j / slices) * 2 * Math.PI;
+      const theta2 = ((j + 1) / slices) * 2 * Math.PI;
+      const v = [
+        [Math.sin(phi1)*Math.cos(theta1), Math.cos(phi1), Math.sin(phi1)*Math.sin(theta1)],
+        [Math.sin(phi2)*Math.cos(theta1), Math.cos(phi2), Math.sin(phi2)*Math.sin(theta1)],
+        [Math.sin(phi2)*Math.cos(theta2), Math.cos(phi2), Math.sin(phi2)*Math.sin(theta2)],
+        [Math.sin(phi1)*Math.cos(theta2), Math.cos(phi1), Math.sin(phi1)*Math.sin(theta2)],
+      ];
+      verts.push(...v[0], ...v[1], ...v[2]);
+      verts.push(...v[0], ...v[2], ...v[3]);
+    }
+  }
+  g_sphereVertCount = verts.length / 3;
+  g_sphereBuffer = gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER, g_sphereBuffer);
+  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(verts), gl.STATIC_DRAW);
+}
+
+function drawSphere(rgba) {
+  gl.uniform4f(u_FragColor, rgba[0], rgba[1], rgba[2], rgba[3] ?? 1.0);
+  gl.bindBuffer(gl.ARRAY_BUFFER, g_sphereBuffer);
+  gl.vertexAttribPointer(a_Position, 3, gl.FLOAT, false, 0, 0);
+  gl.enableVertexAttribArray(a_Position);
+  gl.drawArrays(gl.TRIANGLES, 0, g_sphereVertCount);
+}
+
 // ── Cube scene-object ─────────────────────────────────────────
 class Cube {
   constructor() {
@@ -295,11 +332,11 @@ function drawAnimal() {
     .scale(0.1, 0.2, 0.13);
   backLegR.render();
 
-  // ── Tail ──────────────────────────────────────────────────
-  const tail = new Cube();
-  tail.color = [1, 1, 1, 1];
-  tail.matrix.setIdentity().translate(0, -0.05, -0.22).scale(0.12, 0.12, 0.12);
-  tail.render();
+  // ── Tail (sphere) ─────────────────────────────────────────
+  const tailM = new Matrix4();
+  tailM.setIdentity().translate(0, -0.05, -0.22).scale(0.1, 0.1, 0.1);
+  gl.uniformMatrix4fv(u_ModelMatrix, false, tailM.elements);
+  drawSphere([1, 1, 1, 1]);
 }
 
 // ── UI callbacks (kept for HTML compatibility) ─────────────────
