@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Assignment 3 – Virtual World</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { background: #000; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; font-family: monospace; color: #fff; }
+    #webgl { display: block; cursor: crosshair; }
+    #hud {
+      position: fixed; top: 10px; left: 50%; transform: translateX(-50%);
+      background: rgba(0,0,0,0.5); padding: 6px 14px; border-radius: 6px;
+      font-size: 13px; letter-spacing: 0.05em; pointer-events: none;
+    }
+    #crosshair {
+      position: fixed; top: 50%; left: 50%; transform: translate(-50%,-50%);
+      pointer-events: none; color: rgba(255,255,255,0.8); font-size: 22px; line-height: 1;
+    }
+    #controls {
+      position: fixed; bottom: 10px; left: 50%; transform: translateX(-50%);
+      background: rgba(0,0,0,0.5); padding: 6px 14px; border-radius: 6px;
+      font-size: 12px; text-align: center; pointer-events: none;
+    }
+  </style>
+</head>
+<body>
+  <canvas id="webgl" width="800" height="600"></canvas>
+  <div id="hud">Virtual World Explorer | Click canvas to capture mouse</div>
+  <div id="crosshair">+</div>
+  <div id="controls">
+    WASD – Move &nbsp;|&nbsp; Q/E – Turn &nbsp;|&nbsp; Mouse – Look &nbsp;|&nbsp; F – Add block &nbsp;|&nbsp; G – Delete block
+  </div>
+
+  <!-- cuon-utils & math libs (local copies required for file:// or served via live-server) -->
+  <script src="lib/cuon-utils.js"></script>
+  <script src="lib/cuon-matrix.js"></script>
+  <script src="camera.js"></script>
+  <script src="world.js"></script>
+</body>
+</html>
