@@ -60,7 +60,7 @@
   </div>
   <label>Point light angle: <input type="range" id="slAngle" min="0" max="360" value="0" step="1"></label>
   <label>Spot cutoff (°): <input type="range" id="slCutoff" min="5" max="60" value="20" step="1"></label>
-  <label>Light color: <span class="row"><input type="color" id="lcol" value="#ffffff"> <span id="lcolLabel">White</span></span></label>
+  <label>Light color: <span class="row"><input type="color" id="lcol" value="#ffffff" oninput="document.getElementById('lcolLabel').textContent=this.value"> <span id="lcolLabel">#ffffff</span></span></label>
   <div id="objload">
     <div style="color:#aaa;margin-bottom:4px">Load OBJ model:</div>
     <input type="file" id="objFile" accept=".obj" onchange="loadOBJFile(event)">
