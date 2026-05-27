@@ -258,7 +258,7 @@ scene.add(sun);
 scene.add(sun.target);
 
 const pointLight = new THREE.PointLight(0xffd27a, 1.2, 30, 2);  // point light
-pointLight.position.set(16, 6, 13);
+pointLight.position.set(16, 3, 13);
 pointLight.castShadow = true;
 scene.add(pointLight);
 // visible bulb for the point light
@@ -295,8 +295,11 @@ scene.add(house);
 const matRed  = new THREE.MeshStandardMaterial({ map: texBrickRed, roughness: .9 });
 const matSand = new THREE.MeshStandardMaterial({ map: texBrickSand, roughness: .9 });
 const matWood = new THREE.MeshStandardMaterial({ map: texWood, roughness: .7 });
-const matGlass= new THREE.MeshStandardMaterial({ color: 0x88c0e0, transparent:true, opacity:.45,
-                                                 roughness:.1, metalness:.2 });
+const matGlass= new THREE.MeshPhysicalMaterial({
+  color: 0xcfe8f5, transparent: true, opacity: 0.18,
+  roughness: 0.05, metalness: 0, transmission: 0.0,
+  side: THREE.DoubleSide, depthWrite: false
+});
 
 function addBox(group, w, h, d, x, y, z, mat) {
   const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
@@ -311,81 +314,115 @@ function addBox(group, w, h, d, x, y, z, mat) {
 const CX = 16, CZ = 13;          // house center on the map
 const HALF_W = 6, HALF_D = 5;    // half footprint (so 12 x 10 building)
 const WALL_T = 0.4;
-const FLOOR_H = 3;               // height of each storey
+const FLOOR_H = 3.4;             // single-storey wall height
 const matFrame = new THREE.MeshStandardMaterial({ color: 0x3a2418, roughness: .8 });
 
-// Build a wall (centered) that may contain rectangular window cutouts.
-// Cutouts are filled with a recessed glass pane + a frame border, so windows
-// read as real openings instead of flat decals.
-function buildWall(cx, cy, cz, w, h, d, mat, windows = []) {
-  // Solid wall slab
-  addBox(house, w, h, d, cx, cy, cz, mat);
-  const horizontal = w > d;            // wall faces +/-z (true) or +/-x (false)
-  const faceOffset = (horizontal ? d : w) / 2 + 0.06;
-  windows.forEach(win => {
-    // win = { u (along-wall offset), v (vertical offset), ww, wh }
-    const ww = win.ww, wh = win.wh;
-    // frame (slightly larger, dark) + recessed glass pane
-    if (horizontal) {
-      addBox(house, ww + 0.3, wh + 0.3, 0.12, cx + win.u, cy + win.v, cz + faceOffset, matFrame);
-      addBox(house, ww, wh, 0.06, cx + win.u, cy + win.v, cz + faceOffset + 0.04, matGlass);
-    } else {
-      addBox(house, 0.12, wh + 0.3, ww + 0.3, cx + faceOffset, cy + win.v, cz + win.u, matFrame);
-      addBox(house, 0.06, wh, ww, cx + faceOffset + 0.04, cy + win.v, cz + win.u, matGlass);
+// Build a wall with REAL openings: instead of one slab, we build the wall as
+// strips (below / above / left / right of each opening) so each opening is an
+// actual hole you can see through. `holes` are rectangular gaps in the wall.
+//   wall spans `len` along its axis, centered at (cx,cy,cz), height `h`.
+//   horizontal=true → wall runs along X (faces +/-Z). Otherwise runs along Z.
+function buildWallWithHoles(cx, cy, cz, len, h, t, mat, horizontal, holes = [], frameThem = true) {
+  const yB = cy - h / 2, yT = cy + h / 2;
+  // Sort holes by their along-axis center
+  holes = holes.slice().sort((a, b) => a.u - b.u);
+
+  // Helper to drop a wall segment given along-axis span [a,b] and vertical span [v0,v1]
+  const seg = (a, b, v0, v1) => {
+    if (b - a < 0.01 || v1 - v0 < 0.01) return;
+    const segLen = b - a, segH = v1 - v0;
+    const cu = (a + b) / 2, cv = (v0 + v1) / 2;
+    if (horizontal) addBox(house, segLen, segH, t, cx + cu, cv, cz, mat);
+    else            addBox(house, t, segH, segLen, cx, cv, cz + cu, mat);
+  };
+
+  const half = len / 2;
+  let cursor = -half;
+  for (const hole of holes) {
+    const hl = hole.u - hole.ww / 2, hr = hole.u + hole.ww / 2;
+    const hb = hole.v0, ht = hole.v1;
+    // wall strip to the left of this hole (full height)
+    seg(cursor, hl, yB, yT);
+    // strip below the hole
+    seg(hl, hr, yB, hb);
+    // strip above the hole
+    seg(hl, hr, ht, yT);
+    cursor = hr;
+    // thin frame around the opening (decorative, still see-through)
+    if (frameThem) {
+      const fy = (hb + ht) / 2, fh = ht - hb;
+      if (horizontal) {
+        addBox(house, 0.12, fh + 0.2, t + 0.1, cx + hl, fy, cz, matFrame);
+        addBox(house, 0.12, fh + 0.2, t + 0.1, cx + hr, fy, cz, matFrame);
+        addBox(house, hole.ww + 0.2, 0.12, t + 0.1, cx + hole.u, hb, cz, matFrame);
+        addBox(house, hole.ww + 0.2, 0.12, t + 0.1, cx + hole.u, ht, cz, matFrame);
+        // clear glass pane filling the opening
+        if (hole.glaze) {
+          const pane = new THREE.Mesh(new THREE.PlaneGeometry(hole.ww, ht - hb), matGlass);
+          pane.position.set(cx + hole.u, fy, cz);
+          house.add(pane); countShape();
+          // a single muntin bar across the glass for a paned look
+          addBox(house, hole.ww, 0.06, 0.05, cx + hole.u, fy, cz, matFrame);
+        }
+      } else {
+        addBox(house, t + 0.1, fh + 0.2, 0.12, cx, fy, cz + hl, matFrame);
+        addBox(house, t + 0.1, fh + 0.2, 0.12, cx, fy, cz + hr, matFrame);
+        addBox(house, t + 0.1, 0.12, hole.ww + 0.2, cx, hb, cz + hole.u, matFrame);
+        addBox(house, t + 0.1, 0.12, hole.ww + 0.2, cx, ht, cz + hole.u, matFrame);
+        // clear glass pane filling the opening
+        if (hole.glaze) {
+          const pane = new THREE.Mesh(new THREE.PlaneGeometry(hole.ww, ht - hb), matGlass);
+          pane.position.set(cx, fy, cz + hole.u);
+          pane.rotation.y = Math.PI / 2;
+          house.add(pane); countShape();
+          addBox(house, 0.05, 0.06, hole.ww, cx, fy, cz + hole.u, matFrame);
+        }
+      }
     }
-  });
+  }
+  // final strip after the last hole
+  seg(cursor, half, yB, yT);
 }
 
-const fz = CZ + HALF_D;   // front (+z, where the player approaches)
-const bz = CZ - HALF_D;   // back
-const lx = CX - HALF_W;   // left
-const rx = CX + HALF_W;   // right
+const fzC = CZ + HALF_D;   // front (+z, where the player approaches)
+const bzC = CZ - HALF_D;   // back
+const lxC = CX - HALF_W;   // left
+const rxC = CX + HALF_W;   // right
+const yC  = FLOOR_H / 2;   // wall vertical center
 
-// ── GROUND FLOOR (red brick), y center = 1.5 ──
-const y1 = 1.5;
-// back wall (full)
-buildWall(CX, y1, bz, HALF_W*2, FLOOR_H, WALL_T, matRed,
-  [{u:-3,v:.2,ww:1.4,wh:1.6},{u:3,v:.2,ww:1.4,wh:1.6}]);
-// left & right walls
-buildWall(lx, y1, CZ, WALL_T, FLOOR_H, HALF_D*2, matRed,
-  [{u:-2.5,v:.2,ww:1.4,wh:1.6},{u:2.5,v:.2,ww:1.4,wh:1.6}]);
-buildWall(rx, y1, CZ, WALL_T, FLOOR_H, HALF_D*2, matRed,
-  [{u:-2.5,v:.2,ww:1.4,wh:1.6},{u:2.5,v:.2,ww:1.4,wh:1.6}]);
-// front wall split into two segments leaving a door gap in the middle
-addBox(house, 4.2, FLOOR_H, WALL_T, CX - 3.9, y1, fz, matRed);   // left of door
-addBox(house, 4.2, FLOOR_H, WALL_T, CX + 3.9, y1, fz, matRed);   // right of door
-addBox(house, 3.6, 0.6, WALL_T, CX, 2.7, fz, matRed);            // lintel above door
-// door (wood) recessed in the gap
-addBox(house, 1.8, 2.4, 0.18, CX, 1.2, fz + 0.05, matWood);
-addBox(house, 0.12, 1.6, 0.06, CX - 0.35, 1.3, fz + 0.16, matFrame); // handle side detail
+// window opening template: from y=1.2 to y=2.6
+const W = (u) => ({ u, ww: 1.5, v0: 1.2, v1: 2.6, glaze: true });
 
-// ── UPPER FLOOR (sandstone), y center = 4.5 ──
-const y2 = 4.5;
-buildWall(CX, y2, bz, HALF_W*2, FLOOR_H, WALL_T, matSand,
-  [{u:-3,v:0,ww:1.4,wh:1.6},{u:0,v:0,ww:1.4,wh:1.6},{u:3,v:0,ww:1.4,wh:1.6}]);
-buildWall(CX, y2, fz, HALF_W*2, FLOOR_H, WALL_T, matSand,
-  [{u:-3,v:0,ww:1.4,wh:1.6},{u:0,v:0,ww:1.4,wh:1.6},{u:3,v:0,ww:1.4,wh:1.6}]);
-buildWall(lx, y2, CZ, WALL_T, FLOOR_H, HALF_D*2, matSand,
-  [{u:-2.5,v:0,ww:1.4,wh:1.6},{u:2.5,v:0,ww:1.4,wh:1.6}]);
-buildWall(rx, y2, CZ, WALL_T, FLOOR_H, HALF_D*2, matSand,
-  [{u:-2.5,v:0,ww:1.4,wh:1.6},{u:2.5,v:0,ww:1.4,wh:1.6}]);
-
-// mid-floor band + slab between storeys (thin, decorative)
-addBox(house, HALF_W*2 + 0.4, 0.4, HALF_D*2 + 0.4, CX, 3.0, CZ, matWood);
+// back wall (red brick) — two windows
+buildWallWithHoles(CX, yC, bzC, HALF_W*2, FLOOR_H, WALL_T, matRed, true,  [W(-3), W(3)]);
+// left wall — two windows
+buildWallWithHoles(lxC, yC, CZ, HALF_D*2, FLOOR_H, WALL_T, matRed, false, [W(-2.5), W(2.5)]);
+// right wall — two windows
+buildWallWithHoles(rxC, yC, CZ, HALF_D*2, FLOOR_H, WALL_T, matRed, false, [W(-2.5), W(2.5)]);
+// front wall — a window on each side of a DOOR opening (door = floor-height gap)
+buildWallWithHoles(CX, yC, fzC, HALF_W*2, FLOOR_H, WALL_T, matRed, true, [
+  W(-3.5),
+  { u: 0, ww: 2.0, v0: 0, v1: 2.7 },   // door opening (down to the floor)
+  W(3.5)
+]);
+// wood door set into the doorway, swung slightly open
+const door = addBox(house, 1.8, 2.5, 0.14, CX - 0.9, 1.25, fzC + 0.05, matWood);
+door.rotation.y = -0.5;
+door.position.x = CX - 0.6;
 
 // ── ROOF: proper 4-sided pyramid sitting ON TOP, slightly overhanging ──
 const roof = new THREE.Mesh(
-  new THREE.ConeGeometry(HALF_W * 1.5, 3.2, 4),   // radius > footprint → overhang
+  new THREE.ConeGeometry(HALF_W * 1.5, 3.0, 4),   // radius > footprint → overhang
   new THREE.MeshStandardMaterial({ color: 0x5a3320, roughness: .85 })
 );
-roof.position.set(CX, 6 + 1.6, CZ);   // top of upper floor (y2+1.5=6) + half cone height
-roof.rotation.y = Math.PI / 4;        // align flat sides to walls
+roof.position.set(CX, FLOOR_H + 1.5, CZ);
+roof.rotation.y = Math.PI / 4;
 roof.castShadow = true;
 house.add(roof); countShape();
 
 // Chimney (cylinder) poking through the roof
 const chimney = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.6, 2.8, 12), matRed);
-chimney.position.set(CX + 3, 8.2, CZ - 2);
+chimney.position.set(CX + 3, FLOOR_H + 1.8, CZ - 2);
 chimney.castShadow = true;
 house.add(chimney); countShape();
 
