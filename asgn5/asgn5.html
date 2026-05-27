@@ -620,7 +620,7 @@ addEventListener('keydown', e => {
 addEventListener('keyup',   e => keys[e.code] = false);
 
 let velY = 0, canJump = false;
-const PLAYER_H = 2.2, GRAV = 22, JUMP = 8;
+const PLAYER_H = 2.2, GRAV = 22, JUMP = 8, MOVE_SPEED = 7;
 
 function move(dt) {
   const sprinting = keys['ShiftLeft'] || keys['ShiftRight'];
