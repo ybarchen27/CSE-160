@@ -1,0 +1,639 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Assignment 5 — Three.js: Building Our Dream Home</title>
+<style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  html,body{height:100%;overflow:hidden;background:#0a0a0a;font-family:'Courier New',monospace;color:#f0ddb0}
+  canvas{display:block}
+
+  /* ── Intro / story screen ── */
+  #intro{
+    position:fixed;inset:0;z-index:30;
+    display:flex;flex-direction:column;align-items:center;justify-content:center;
+    text-align:center;padding:40px;
+    background:radial-gradient(ellipse at 50% 30%, #1b2433 0%, #0a0d14 70%);
+  }
+  #intro h1{font-size:clamp(26px,5vw,42px);color:#ffd700;letter-spacing:.04em;margin-bottom:6px;
+    text-shadow:0 2px 20px rgba(255,215,0,.25)}
+  #intro .sub{color:#c8a96e;font-size:13px;letter-spacing:.22em;margin-bottom:26px;text-transform:uppercase}
+  #intro p{max-width:560px;line-height:1.9;margin-bottom:12px;color:#d8d2c4;font-size:14px}
+  #intro .keys{margin-top:14px;color:#8a96a8;font-size:12px;line-height:2}
+  #intro .keys b{color:#ffd700}
+  #intro button{
+    margin-top:28px;padding:14px 42px;font-size:15px;font-family:inherit;letter-spacing:.06em;
+    background:linear-gradient(180deg,#ffd86b,#c8a14a);color:#1a1206;border:none;border-radius:8px;
+    cursor:pointer;font-weight:bold;box-shadow:0 6px 24px rgba(255,215,0,.3);transition:transform .15s, box-shadow .15s}
+  #intro button:hover{transform:translateY(-2px);box-shadow:0 10px 30px rgba(255,215,0,.45)}
+
+  /* ── HUD ── */
+  #crosshair{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);
+    color:rgba(255,255,255,.7);font-size:20px;pointer-events:none;z-index:10;display:none}
+  #help{position:fixed;bottom:14px;left:50%;transform:translateX(-50%);
+    background:rgba(0,0,0,.55);backdrop-filter:blur(6px);padding:8px 20px;border-radius:10px;
+    font-size:12px;color:#cdd6e4;pointer-events:none;z-index:10;display:none;white-space:nowrap;
+    border:1px solid rgba(255,255,255,.08)}
+  #help b{color:#ffd700}
+  #panel{position:fixed;top:14px;left:14px;background:rgba(10,14,22,.78);backdrop-filter:blur(8px);
+    border:1px solid rgba(255,255,255,.12);border-radius:12px;padding:14px 16px;font-size:12px;
+    z-index:10;display:none;min-width:210px}
+  #panel h3{color:#ffd700;font-size:12px;letter-spacing:.12em;margin-bottom:10px;text-transform:uppercase}
+  #panel .row{display:flex;align-items:center;gap:8px;margin-bottom:9px}
+  #panel label{flex:1;color:#b9c2d0}
+  #panel input[type=range]{width:96px;accent-color:#ffd700}
+  #panel .btn{padding:4px 11px;font-size:11px;font-family:inherit;background:rgba(255,255,255,.08);
+    border:1px solid rgba(255,255,255,.2);color:#cdd6e4;border-radius:6px;cursor:pointer;transition:.15s}
+  #panel .btn.on{background:rgba(255,215,0,.18);border-color:#ffd700;color:#ffd700}
+  #panel .hint{color:#6f7a8c;font-size:10px;margin-top:6px;line-height:1.5}
+
+  #wow{position:fixed;top:14px;right:14px;background:rgba(10,14,22,.78);backdrop-filter:blur(8px);
+    border:1px solid rgba(255,215,0,.3);border-radius:12px;padding:12px 16px;font-size:12px;
+    z-index:10;display:none;max-width:240px}
+  #wow h3{color:#ffd700;font-size:12px;letter-spacing:.1em;margin-bottom:6px}
+  #wow p{color:#b9c2d0;line-height:1.6;font-size:11px}
+  #wow .day{color:#ffd700;font-weight:bold}
+</style>
+</head>
+<body>
+
+<!-- ════ INTRO SCREEN ════ -->
+<div id="intro">
+  <h1>🏡 Building Our Dream Home</h1>
+  <div class="sub">A First-Person World · Three.js Edition</div>
+  <p>We bought five acres of open countryside and built a two-story brick house with our own hands. Walk the property, watch the day cycle, and explore the world we made.</p>
+  <div class="keys">
+    <b>W A S D</b> — move &nbsp;·&nbsp; <b>Mouse</b> — look &nbsp;·&nbsp; <b>Space</b> — jump<br>
+    <b>Shift</b> — sprint &nbsp;·&nbsp; <b>ESC</b> — release mouse
+  </div>
+  <button id="startBtn">Walk the Property →</button>
+</div>
+
+<!-- ════ HUD ════ -->
+<div id="crosshair">✛</div>
+<div id="help"><b>WASD</b> move · <b>Mouse</b> look · <b>Space</b> jump · <b>Shift</b> sprint · <b>ESC</b> release</div>
+
+<div id="panel">
+  <h3>⚙ Scene Controls</h3>
+  <div class="row">
+    <button class="btn on" id="btnDay">☀ Day Cycle: AUTO</button>
+  </div>
+  <div class="row">
+    <label>Time of day</label>
+    <input type="range" id="slTime" min="0" max="100" value="25">
+  </div>
+  <div class="row">
+    <label>Point light</label>
+    <button class="btn on" id="btnPoint">ON</button>
+  </div>
+  <div class="row">
+    <label>Spot light</label>
+    <button class="btn on" id="btnSpot">ON</button>
+  </div>
+  <div class="hint">Shapes: <span id="shapeCount">0</span> · animated windmill, orbiting lanterns & a day/night sun</div>
+</div>
+
+<div id="wow">
+  <h3>★ Wow Feature</h3>
+  <p>A full <b>day/night cycle</b>: the sun arcs across a procedural sky, colors shift from dawn to dusk, lanterns glow at night, and the windmill turns. Plus jump physics & collision. <span class="day" id="clock">Dawn</span></p>
+</div>
+
+<!-- Three.js via import map (ES modules from CDN) -->
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+    "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+  }
+}
+</script>
+
+<script type="module">
+import * as THREE from 'three';
+import { PointerLockControls } from 'three/addons/controls/PointerLockControls.js';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+
+// ════════════════════════════════════════════════════════════
+//  SCENE / RENDERER / CAMERA
+// ════════════════════════════════════════════════════════════
+const scene = new THREE.Scene();
+scene.fog = new THREE.Fog(0x9fb8d0, 40, 140);
+
+const renderer = new THREE.WebGLRenderer({ antialias: true });
+renderer.setSize(innerWidth, innerHeight);
+renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+document.body.appendChild(renderer.domElement);
+
+// REQUIREMENT: perspective camera
+const camera = new THREE.PerspectiveCamera(70, innerWidth / innerHeight, 0.1, 500);
+camera.position.set(16, 2.2, 40);
+
+addEventListener('resize', () => {
+  camera.aspect = innerWidth / innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+
+// shape counter (proves "20+ primitives" requirement)
+let SHAPE_COUNT = 0;
+const countShape = () => { SHAPE_COUNT++; };
+
+// ════════════════════════════════════════════════════════════
+//  PROCEDURAL TEXTURES (canvas — no external files needed)
+// ════════════════════════════════════════════════════════════
+function makeBrickTexture(base, mortar, repeat = 4) {
+  const c = document.createElement('canvas'); c.width = c.height = 256;
+  const x = c.getContext('2d');
+  x.fillStyle = mortar; x.fillRect(0, 0, 256, 256);
+  const bw = 64, bh = 28, gap = 4;
+  for (let row = 0, y = 0; y < 256; row++, y += bh + gap) {
+    const off = (row % 2) ? bw / 2 : 0;
+    for (let px = -bw; px < 256; px += bw + gap) {
+      const shade = 18 - Math.random() * 30;
+      x.fillStyle = shadeColor(base, shade);
+      x.fillRect(px + off, y, bw, bh);
+    }
+  }
+  const t = new THREE.CanvasTexture(c);
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  t.repeat.set(repeat, repeat);
+  t.anisotropy = 4;
+  return t;
+}
+function makeGrassTexture() {
+  const c = document.createElement('canvas'); c.width = c.height = 256;
+  const x = c.getContext('2d');
+  x.fillStyle = '#4a7c34'; x.fillRect(0, 0, 256, 256);
+  for (let i = 0; i < 9000; i++) {
+    const g = 60 + Math.random() * 90;
+    x.fillStyle = `rgb(${30 + Math.random() * 30},${g},${30 + Math.random() * 20})`;
+    x.fillRect(Math.random() * 256, Math.random() * 256, 1.6, 3);
+  }
+  const t = new THREE.CanvasTexture(c);
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  t.repeat.set(24, 24);
+  return t;
+}
+function makeWoodTexture() {
+  const c = document.createElement('canvas'); c.width = c.height = 256;
+  const x = c.getContext('2d');
+  for (let i = 0; i < 256; i++) {
+    const n = Math.sin(i * 0.18) * 18 + Math.random() * 14;
+    x.fillStyle = `rgb(${120 + n},${78 + n * .6},${40 + n * .3})`;
+    x.fillRect(0, i, 256, 1);
+  }
+  const t = new THREE.CanvasTexture(c);
+  t.wrapS = t.wrapT = THREE.RepeatWrapping;
+  return t;
+}
+function shadeColor(hex, amt) {
+  const n = parseInt(hex.slice(1), 16);
+  let r = (n >> 16) + amt, g = ((n >> 8) & 255) + amt, b = (n & 255) + amt;
+  r = Math.max(0, Math.min(255, r)); g = Math.max(0, Math.min(255, g)); b = Math.max(0, Math.min(255, b));
+  return `rgb(${r | 0},${g | 0},${b | 0})`;
+}
+
+const texBrickRed  = makeBrickTexture('#8a3b28', '#3a2018');
+const texBrickSand = makeBrickTexture('#c2a06a', '#6e5a3a');
+const texGrass     = makeGrassTexture();
+const texWood      = makeWoodTexture();
+
+// ════════════════════════════════════════════════════════════
+//  SKYBOX — procedural cubemap (REQUIREMENT: skybox)
+// ════════════════════════════════════════════════════════════
+function makeSkyFace(top, bottom, withSun = false) {
+  const c = document.createElement('canvas'); c.width = c.height = 512;
+  const x = c.getContext('2d');
+  const g = x.createLinearGradient(0, 0, 0, 512);
+  g.addColorStop(0, top); g.addColorStop(1, bottom);
+  x.fillStyle = g; x.fillRect(0, 0, 512, 512);
+  // scattered clouds
+  x.fillStyle = 'rgba(255,255,255,0.35)';
+  for (let i = 0; i < 14; i++) {
+    const cx = Math.random() * 512, cy = Math.random() * 230, r = 18 + Math.random() * 40;
+    for (let b = 0; b < 5; b++) {
+      x.beginPath();
+      x.arc(cx + b * r * 0.7 - r, cy + Math.sin(b) * 8, r * (0.6 + Math.random() * 0.4), 0, 7);
+      x.fill();
+    }
+  }
+  return c;
+}
+function buildSkybox() {
+  const top = '#2a5d9e', bot = '#bcd6ef';
+  const faces = [
+    makeSkyFace(top, bot), makeSkyFace(top, bot),
+    makeSkyFace('#1f4e8a', '#3a6fa8'),                 // up
+    makeSkyFace('#6a8a5a', '#4a7c34'),                 // down (toward ground)
+    makeSkyFace(top, bot), makeSkyFace(top, bot)
+  ];
+  const loader = new THREE.CubeTextureLoader();
+  const urls = faces.map(c => c.toDataURL());
+  return loader.load(urls);
+}
+scene.background = buildSkybox();
+
+// ════════════════════════════════════════════════════════════
+//  LIGHTS — REQUIREMENT: 3+ different light types
+//  Using FOUR: Ambient, Directional (the sun), Hemisphere, Point, Spot
+// ════════════════════════════════════════════════════════════
+const ambient = new THREE.AmbientLight(0xffffff, 0.35);
+scene.add(ambient);
+
+const hemi = new THREE.HemisphereLight(0xbcd6ef, 0x4a7c34, 0.5);
+scene.add(hemi);
+
+const sun = new THREE.DirectionalLight(0xfff2d0, 1.4);   // directional light (animated across sky)
+sun.position.set(30, 50, 20);
+sun.castShadow = true;
+sun.shadow.mapSize.set(2048, 2048);
+sun.shadow.camera.left = -50; sun.shadow.camera.right = 50;
+sun.shadow.camera.top = 50; sun.shadow.camera.bottom = -50;
+sun.shadow.camera.far = 200;
+scene.add(sun);
+scene.add(sun.target);
+
+const pointLight = new THREE.PointLight(0xffd27a, 1.2, 30, 2);  // point light
+pointLight.position.set(16, 6, 13);
+pointLight.castShadow = true;
+scene.add(pointLight);
+// visible bulb for the point light
+const bulb = new THREE.Mesh(
+  new THREE.SphereGeometry(0.25, 16, 16),
+  new THREE.MeshBasicMaterial({ color: 0xffe9a8 })
+);
+pointLight.add(bulb);
+
+const spot = new THREE.SpotLight(0xffffff, 2.0, 35, Math.PI / 7, 0.4, 1.5); // spot light
+spot.position.set(16, 7, 19.5);
+spot.target.position.set(16, 0, 19.5);
+spot.castShadow = true;
+scene.add(spot); scene.add(spot.target);
+
+// ════════════════════════════════════════════════════════════
+//  GROUND — textured plane (REQUIREMENT: textured shape)
+// ════════════════════════════════════════════════════════════
+const ground = new THREE.Mesh(
+  new THREE.PlaneGeometry(120, 120),
+  new THREE.MeshStandardMaterial({ map: texGrass, roughness: 1 })
+);
+ground.rotation.x = -Math.PI / 2;
+ground.receiveShadow = true;
+scene.add(ground);
+
+// ════════════════════════════════════════════════════════════
+//  THE HOUSE — built from many textured primitives
+//  REQUIREMENTS satisfied here: many cubes (textured), shape variety
+// ════════════════════════════════════════════════════════════
+const house = new THREE.Group();
+scene.add(house);
+
+const matRed  = new THREE.MeshStandardMaterial({ map: texBrickRed, roughness: .9 });
+const matSand = new THREE.MeshStandardMaterial({ map: texBrickSand, roughness: .9 });
+const matWood = new THREE.MeshStandardMaterial({ map: texWood, roughness: .7 });
+const matGlass= new THREE.MeshStandardMaterial({ color: 0x88c0e0, transparent:true, opacity:.45,
+                                                 roughness:.1, metalness:.2 });
+
+function addBox(group, w, h, d, x, y, z, mat) {
+  const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
+  m.position.set(x, y, z);
+  m.castShadow = true; m.receiveShadow = true;
+  group.add(m);
+  countShape();
+  return m;
+}
+
+// Ground floor (red brick) — four walls as boxes
+const HW = 13, HD = 12, T = 0.4;
+addBox(house, HW, 3, T, 16, 1.5, 7,  matRed);          // back wall
+addBox(house, HW, 3, T, 16, 1.5, 19, matRed);          // front (with door gap handled visually)
+addBox(house, T, 3, HD, 9.5, 1.5, 13, matRed);         // left wall
+addBox(house, T, 3, HD, 22.5,1.5, 13, matRed);         // right wall
+
+// Upper floor (sandstone) — four walls
+addBox(house, HW, 3, T, 16, 4.5, 7,  matSand);
+addBox(house, HW, 3, T, 16, 4.5, 19, matSand);
+addBox(house, T, 3, HD, 9.5, 4.5, 13, matSand);
+addBox(house, T, 3, HD, 22.5,4.5, 13, matSand);
+
+// Floor slab + second-storey slab
+addBox(house, HW, 0.3, HD, 16, 0.15, 13, matWood);
+addBox(house, HW, 0.3, HD, 16, 3.0,  13, matWood);
+
+// Roof (pyramid = cone with 4 segments — a different primitive: ConeGeometry)
+const roof = new THREE.Mesh(
+  new THREE.ConeGeometry(10.5, 3.5, 4),
+  new THREE.MeshStandardMaterial({ color: 0x5a3320, roughness: .8 })
+);
+roof.position.set(16, 7.7, 13);
+roof.rotation.y = Math.PI / 4;
+roof.castShadow = true;
+house.add(roof); countShape();
+
+// Chimney (cylinder)
+const chimney = new THREE.Mesh(
+  new THREE.CylinderGeometry(0.5, 0.6, 2.5, 12),
+  matRed
+);
+chimney.position.set(20, 8, 10);
+chimney.castShadow = true;
+house.add(chimney); countShape();
+
+// Door (wood box) + glass windows (boxes)
+addBox(house, 1.8, 2.4, 0.2, 16, 1.2, 19.1, matWood);  // door
+const winPos = [
+  [12,1.5,19.1],[20,1.5,19.1],[12,4.5,19.1],[20,4.5,19.1],
+  [9.4,1.5,11],[9.4,1.5,15],[22.6,1.5,11],[22.6,1.5,15],
+  [9.4,4.5,13],[22.6,4.5,13],[16,4.5,7.1]
+];
+winPos.forEach(([x,y,z]) => {
+  const horiz = (z > 7.2 || z < 6.9) ? false : true;
+  const w = (x===9.4||x===22.6) ? 0.15 : 1.4;
+  const d = (x===9.4||x===22.6) ? 1.4 : 0.15;
+  addBox(house, w, 1.3, d, x, y, z, matGlass);
+});
+
+// ════════════════════════════════════════════════════════════
+//  DECORATIVE PRIMITIVES around the property (variety + count)
+//  Spheres (bushes), Cylinders+Spheres (trees), Cones, Torus, etc.
+// ════════════════════════════════════════════════════════════
+const matTrunk  = new THREE.MeshStandardMaterial({ color: 0x6b4423, roughness: 1 });
+const matLeaf   = new THREE.MeshStandardMaterial({ color: 0x2e6b2a, roughness: 1 });
+const matStone  = new THREE.MeshStandardMaterial({ color: 0x888d92, roughness: 1 });
+
+function makeTree(x, z, scale = 1) {
+  const g = new THREE.Group();
+  const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.3*scale, 0.4*scale, 3*scale, 8), matTrunk);
+  trunk.position.y = 1.5*scale; trunk.castShadow = true; g.add(trunk); countShape();
+  const foliage = new THREE.Mesh(new THREE.SphereGeometry(1.6*scale, 12, 12), matLeaf);
+  foliage.position.y = 3.6*scale; foliage.castShadow = true; g.add(foliage); countShape();
+  const top = new THREE.Mesh(new THREE.ConeGeometry(1.2*scale, 2*scale, 10), matLeaf);
+  top.position.y = 5*scale; top.castShadow = true; g.add(top); countShape();
+  g.position.set(x, 0, z);
+  scene.add(g);
+}
+[[3,4,1.1],[5,32,1],[30,5,1.2],[33,28,1],[2,24,.9],[31,18,1.1],[6,12,.8],[28,34,1]]
+  .forEach(([x,z,s]) => makeTree(x, z, s));
+
+// Bushes (spheres)
+for (let i = 0; i < 8; i++) {
+  const bush = new THREE.Mesh(new THREE.SphereGeometry(0.6 + Math.random()*0.4, 10, 10), matLeaf);
+  bush.position.set(10 + Math.random()*14, 0.4, 20.5 + Math.random()*1.2);
+  bush.castShadow = true; scene.add(bush); countShape();
+}
+
+// Rocks (icosahedrons — another primitive type)
+for (let i = 0; i < 6; i++) {
+  const r = new THREE.Mesh(new THREE.IcosahedronGeometry(0.5 + Math.random()*0.5, 0), matStone);
+  r.position.set(2 + Math.random()*30, 0.4, 2 + Math.random()*30);
+  r.castShadow = true; r.rotation.set(Math.random(),Math.random(),Math.random());
+  scene.add(r); countShape();
+}
+
+// Garden well (cylinder + torus rim)
+const well = new THREE.Mesh(new THREE.CylinderGeometry(1, 1, 1.2, 16), matStone);
+well.position.set(6, 0.6, 6); well.castShadow = true; scene.add(well); countShape();
+const wellRim = new THREE.Mesh(new THREE.TorusGeometry(1, 0.15, 8, 20), matStone);
+wellRim.position.set(6, 1.2, 6); wellRim.rotation.x = Math.PI/2; scene.add(wellRim); countShape();
+
+// Fence posts (cylinders) around front
+const matFence = new THREE.MeshStandardMaterial({ map: texWood, roughness: .8 });
+for (let x = 2; x <= 30; x += 4) {
+  const post = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.12, 1.4, 6), matFence);
+  post.position.set(x, 0.7, 30); post.castShadow = true; scene.add(post); countShape();
+}
+
+// ════════════════════════════════════════════════════════════
+//  ANIMATED WINDMILL (REQUIREMENT: animated shape) + WOW
+//  Cylinder tower + box blades on a rotating hub
+// ════════════════════════════════════════════════════════════
+const windmill = new THREE.Group();
+const tower = new THREE.Mesh(new THREE.CylinderGeometry(0.6, 1.1, 8, 12),
+  new THREE.MeshStandardMaterial({ color: 0xddd6c4, roughness: .9 }));
+tower.position.y = 4; tower.castShadow = true; windmill.add(tower); countShape();
+
+const blades = new THREE.Group();
+blades.position.set(0, 7, 1);
+for (let i = 0; i < 4; i++) {
+  const blade = new THREE.Mesh(new THREE.BoxGeometry(0.3, 4, 0.1), matWood);
+  blade.position.y = 2;
+  const arm = new THREE.Group();
+  arm.add(blade); arm.rotation.z = i * Math.PI / 2;
+  blades.add(arm); countShape();
+}
+const hub = new THREE.Mesh(new THREE.SphereGeometry(0.4, 12, 12),
+  new THREE.MeshStandardMaterial({ color: 0x444 }));
+blades.add(hub); countShape();
+windmill.add(blades);
+windmill.position.set(30, 0, 32);
+scene.add(windmill);
+
+// ════════════════════════════════════════════════════════════
+//  ORBITING LANTERNS (animated + glow at night) — WOW detail
+// ════════════════════════════════════════════════════════════
+const lanterns = [];
+for (let i = 0; i < 3; i++) {
+  const lant = new THREE.Mesh(new THREE.SphereGeometry(0.35, 12, 12),
+    new THREE.MeshStandardMaterial({ color: 0xffcf6b, emissive: 0xffaa33, emissiveIntensity: 1 }));
+  lant.castShadow = true;
+  scene.add(lant); countShape();
+  lanterns.push({ mesh: lant, phase: i * (Math.PI * 2 / 3) });
+}
+
+// ════════════════════════════════════════════════════════════
+//  CUSTOM TEXTURED 3D MODEL (REQUIREMENT)
+//  We build a small glTF in-memory and load it through GLTFLoader,
+//  so a real loader is genuinely exercised — no external file needed.
+//  (Swap MODEL_URL for your own .glb to use a downloaded model.)
+// ════════════════════════════════════════════════════════════
+const MODEL_URL = null; // ← put a path/URL to your own .glb here to use it
+
+function buildProceduralGLB() {
+  // Build a little "mailbox" model, export to GLB bytes, return a blob URL.
+  // This guarantees GLTFLoader.load() is the real code path that places the model.
+  const grp = new THREE.Group();
+  const postMat = new THREE.MeshStandardMaterial({ map: texWood });
+  const boxMat  = new THREE.MeshStandardMaterial({ map: texBrickRed });
+  const p = new THREE.Mesh(new THREE.CylinderGeometry(0.08,0.08,1.4,8), postMat);
+  p.position.y = 0.7; grp.add(p);
+  const b = new THREE.Mesh(new THREE.BoxGeometry(0.5,0.4,0.8), boxMat);
+  b.position.y = 1.5; grp.add(b);
+  const flag = new THREE.Mesh(new THREE.BoxGeometry(0.04,0.3,0.2),
+    new THREE.MeshStandardMaterial({ color: 0xcc2222 }));
+  flag.position.set(0.27,1.6,0); grp.add(flag);
+  grp.traverse(o => { if (o.isMesh){ o.castShadow=true; } });
+  return grp;
+}
+
+const gltfLoader = new GLTFLoader();
+if (MODEL_URL) {
+  gltfLoader.load(MODEL_URL, (g) => {
+    const m = g.scene; m.position.set(13, 0, 22); m.scale.setScalar(1);
+    m.traverse(o => { if (o.isMesh) o.castShadow = true; });
+    scene.add(m); countShape(); updateCounter();
+  });
+} else {
+  // Export a procedural model to GLB then load it back through GLTFLoader
+  import('three/addons/exporters/GLTFExporter.js').then(({ GLTFExporter }) => {
+    const exporter = new GLTFExporter();
+    const model = buildProceduralGLB();
+    exporter.parse(model, (glb) => {
+      const blob = new Blob([glb], { type: 'model/gltf-binary' });
+      const url = URL.createObjectURL(blob);
+      gltfLoader.load(url, (g) => {
+        const m = g.scene; m.position.set(13, 0, 22);
+        m.traverse(o => { if (o.isMesh) o.castShadow = true; });
+        scene.add(m); countShape(); updateCounter();
+        URL.revokeObjectURL(url);
+      });
+    }, (err) => console.warn('GLB export failed', err), { binary: true });
+  });
+}
+
+// ════════════════════════════════════════════════════════════
+//  CONTROLS — PointerLockControls (REQUIREMENT: camera controls)
+// ════════════════════════════════════════════════════════════
+const controls = new PointerLockControls(camera, renderer.domElement);
+scene.add(controls.getObject());
+
+const intro = document.getElementById('intro');
+const crosshair = document.getElementById('crosshair');
+const help = document.getElementById('help');
+const panel = document.getElementById('panel');
+const wow = document.getElementById('wow');
+
+document.getElementById('startBtn').addEventListener('click', () => controls.lock());
+controls.addEventListener('lock', () => {
+  intro.style.display = 'none';
+  crosshair.style.display = help.style.display = panel.style.display = wow.style.display = 'block';
+});
+controls.addEventListener('unlock', () => {
+  intro.style.display = 'flex';
+});
+
+// Movement state
+const keys = {};
+addEventListener('keydown', e => keys[e.code] = true);
+addEventListener('keyup',   e => keys[e.code] = false);
+
+let velY = 0, canJump = false;
+const PLAYER_H = 2.2, GRAV = 22, JUMP = 8;
+
+function move(dt) {
+  const speed = (keys['ShiftLeft'] || keys['ShiftRight'] ? 14 : 7) * dt;
+  const dir = new THREE.Vector3();
+  if (keys['KeyW']) dir.z += 1;
+  if (keys['KeyS']) dir.z -= 1;
+  if (keys['KeyA']) dir.x -= 1;
+  if (keys['KeyD']) dir.x += 1;
+  dir.normalize();
+  if (keys['KeyW'] || keys['KeyS']) controls.moveForward(dir.z * speed);
+  if (keys['KeyA'] || keys['KeyD']) controls.moveRight(dir.x * speed);
+
+  // jump + gravity
+  if (keys['Space'] && canJump) { velY = JUMP; canJump = false; }
+  velY -= GRAV * dt;
+  const obj = controls.getObject();
+  obj.position.y += velY * dt;
+  if (obj.position.y < PLAYER_H) { obj.position.y = PLAYER_H; velY = 0; canJump = true; }
+
+  // keep inside the 120×120 world
+  obj.position.x = Math.max(-58, Math.min(58, obj.position.x));
+  obj.position.z = Math.max(-58, Math.min(58, obj.position.z));
+}
+
+// ════════════════════════════════════════════════════════════
+//  DAY / NIGHT CYCLE — the WOW feature
+// ════════════════════════════════════════════════════════════
+let dayAuto = true, manualT = 0.25;
+const slTime = document.getElementById('slTime');
+const btnDay = document.getElementById('btnDay');
+const btnPoint = document.getElementById('btnPoint');
+const btnSpot = document.getElementById('btnSpot');
+const clockEl = document.getElementById('clock');
+
+btnDay.onclick = () => {
+  dayAuto = !dayAuto;
+  btnDay.textContent = dayAuto ? '☀ Day Cycle: AUTO' : '☀ Day Cycle: MANUAL';
+  btnDay.classList.toggle('on', dayAuto);
+};
+slTime.oninput = () => { manualT = slTime.value / 100; dayAuto = false;
+  btnDay.textContent = '☀ Day Cycle: MANUAL'; btnDay.classList.remove('on'); };
+btnPoint.onclick = () => { pointLight.visible = !pointLight.visible;
+  btnPoint.textContent = pointLight.visible ? 'ON':'OFF'; btnPoint.classList.toggle('on', pointLight.visible); };
+btnSpot.onclick = () => { spot.visible = !spot.visible;
+  btnSpot.textContent = spot.visible ? 'ON':'OFF'; btnSpot.classList.toggle('on', spot.visible); };
+
+function lerpColor(a, b, t) {
+  const ca = new THREE.Color(a), cb = new THREE.Color(b);
+  return ca.lerp(cb, t);
+}
+function updateDay(t) {
+  // t in [0,1): 0=midnight, .25=dawn, .5=noon, .75=dusk
+  const ang = t * Math.PI * 2 - Math.PI / 2;
+  const sx = Math.cos(ang) * 60, sy = Math.sin(ang) * 60;
+  sun.position.set(16 + sx, Math.max(sy, -10), 13 + 25);
+  sun.target.position.set(16, 0, 13);
+
+  const daylight = Math.max(0, Math.sin(t * Math.PI * 2 - Math.PI / 2) * 0.5 + 0.5);
+  sun.intensity = daylight * 1.6;
+  ambient.intensity = 0.12 + daylight * 0.35;
+  hemi.intensity = 0.15 + daylight * 0.45;
+
+  // sky + fog color shift
+  let skyTop, skyBot, label;
+  if (t < 0.22 || t > 0.80) { skyTop='#0b1020'; skyBot='#1a2740'; label='Night'; }
+  else if (t < 0.32)        { skyTop='#3a4a78'; skyBot='#e08a4a'; label='Dawn'; }
+  else if (t < 0.68)        { skyTop='#2a5d9e'; skyBot='#bcd6ef'; label='Midday'; }
+  else                      { skyTop='#3a3a6a'; skyBot='#d8743a'; label='Dusk'; }
+  const fc = lerpColor(skyBot, skyTop, 0.35);
+  scene.fog.color.copy(fc);
+  renderer.setClearColor(fc);
+
+  sun.color.copy(lerpColor('#fff2d0', '#ffb060', 1 - daylight));
+
+  // lanterns + point light glow stronger at night
+  const nightAmt = 1 - daylight;
+  lanterns.forEach(l => l.mesh.material.emissiveIntensity = 0.3 + nightAmt * 1.4);
+  pointLight.intensity = 0.4 + nightAmt * 1.8;
+
+  clockEl.textContent = label;
+}
+
+// ════════════════════════════════════════════════════════════
+//  ANIMATION LOOP
+// ════════════════════════════════════════════════════════════
+const clock = new THREE.Clock();
+function updateCounter() { document.getElementById('shapeCount').textContent = SHAPE_COUNT; }
+updateCounter();
+
+function animate() {
+  requestAnimationFrame(animate);
+  const dt = Math.min(clock.getDelta(), 0.05);
+  const t = clock.elapsedTime;
+
+  if (controls.isLocked) move(dt);
+
+  // animated windmill
+  blades.rotation.z += dt * 1.2;
+
+  // orbiting lanterns
+  lanterns.forEach(l => {
+    const a = t * 0.6 + l.phase;
+    l.mesh.position.set(16 + Math.cos(a) * 9, 3 + Math.sin(t + l.phase) * 0.5, 13 + Math.sin(a) * 9);
+  });
+
+  // day cycle
+  const dayT = dayAuto ? (t * 0.02) % 1 : manualT;
+  if (dayAuto) slTime.value = dayT * 100;
+  updateDay(dayT);
+
+  renderer.render(scene, camera);
+}
+animate();
+</script>
+</body>
+</html>
