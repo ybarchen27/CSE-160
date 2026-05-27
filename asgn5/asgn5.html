@@ -573,7 +573,7 @@ if (MODEL_URL) {
 //  CONTROLS — PointerLockControls (REQUIREMENT: camera controls)
 // ════════════════════════════════════════════════════════════
 const controls = new PointerLockControls(camera, renderer.domElement);
-scene.add(controls.getObject());
+scene.add(camera);   // r160: the camera itself is the controlled object
 
 const intro = document.getElementById('intro');
 const crosshair = document.getElementById('crosshair');
@@ -582,12 +582,27 @@ const panel = document.getElementById('panel');
 const wow = document.getElementById('wow');
 const resumeHint = document.getElementById('resumeHint');
 
-document.getElementById('startBtn').addEventListener('click', () => controls.lock());
+function tryLock() {
+  try { controls.lock(); }
+  catch (err) { console.warn('lock() failed:', err); }
+}
 
-// Click the canvas to (re)capture the mouse — used to resume after ESC
-renderer.domElement.addEventListener('click', () => {
-  if (!controls.isLocked && intro.style.display === 'none') controls.lock();
+document.getElementById('startBtn').addEventListener('click', (e) => {
+  e.preventDefault();
+  tryLock();
 });
+
+// Click anywhere on the canvas to (re)capture the mouse after ESC.
+// Only when we've started and aren't already locked.
+renderer.domElement.addEventListener('mousedown', () => {
+  if (!controls.isLocked && started) tryLock();
+});
+
+// Surface any pointer-lock errors (e.g. browser cooldown) instead of silently failing
+document.addEventListener('pointerlockerror', () => {
+  resumeHint.innerHTML = '⚠ Browser blocked mouse capture — wait a second and <b>click again</b>.';
+  resumeHint.style.display = 'block';
+}, false);
 
 let started = false;
 controls.addEventListener('lock', () => {
@@ -599,6 +614,7 @@ controls.addEventListener('lock', () => {
 controls.addEventListener('unlock', () => {
   // ESC frees the mouse to use the panel — do NOT reset to intro once started
   if (started) {
+    resumeHint.innerHTML = '🖱 Mouse released — adjust the panel, then <b>click anywhere</b> to resume walking';
     resumeHint.style.display = 'block';
     crosshair.style.display = 'none';
   } else {
@@ -642,7 +658,7 @@ function move(dt) {
   // jump + gravity
   if (keys['Space'] && canJump) { velY = JUMP; canJump = false; }
   velY -= GRAV * dt;
-  const obj = controls.getObject();
+  const obj = camera;
   obj.position.y += velY * dt;
   if (obj.position.y < PLAYER_H) { obj.position.y = PLAYER_H; velY = 0; canJump = true; }
 
