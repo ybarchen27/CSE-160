@@ -31,6 +31,11 @@
   /* ── HUD ── */
   #crosshair{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);
     color:rgba(255,255,255,.7);font-size:20px;pointer-events:none;z-index:10;display:none}
+  #resumeHint{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);
+    background:rgba(10,14,22,.9);border:1px solid rgba(255,215,0,.4);border-radius:10px;
+    padding:14px 24px;font-size:14px;color:#f0ddb0;z-index:25;display:none;text-align:center;
+    pointer-events:none}
+  #resumeHint b{color:#ffd700}
   #help{position:fixed;bottom:14px;left:50%;transform:translateX(-50%);
     background:rgba(0,0,0,.55);backdrop-filter:blur(6px);padding:8px 20px;border-radius:10px;
     font-size:12px;color:#cdd6e4;pointer-events:none;z-index:10;display:none;white-space:nowrap;
@@ -72,7 +77,8 @@
 
 <!-- ════ HUD ════ -->
 <div id="crosshair">✛</div>
-<div id="help"><b>WASD</b> move · <b>Mouse</b> look · <b>Space</b> jump · <b>Shift</b> sprint · <b>ESC</b> release</div>
+<div id="resumeHint">🖱 Mouse released — adjust the panel, then <b>click anywhere</b> to resume walking</div>
+<div id="help"><b>WASD</b> move · <b>Mouse</b> look · <b>Space</b> jump · <b>Shift</b> sprint · <b>[ ]</b> time · <b>P</b> auto · <b>L/K</b> lights · <b>ESC</b> free mouse</div>
 
 <div id="panel">
   <h3>⚙ Scene Controls</h3>
@@ -574,34 +580,64 @@ const crosshair = document.getElementById('crosshair');
 const help = document.getElementById('help');
 const panel = document.getElementById('panel');
 const wow = document.getElementById('wow');
+const resumeHint = document.getElementById('resumeHint');
 
 document.getElementById('startBtn').addEventListener('click', () => controls.lock());
+
+// Click the canvas to (re)capture the mouse — used to resume after ESC
+renderer.domElement.addEventListener('click', () => {
+  if (!controls.isLocked && intro.style.display === 'none') controls.lock();
+});
+
+let started = false;
 controls.addEventListener('lock', () => {
+  started = true;
   intro.style.display = 'none';
+  resumeHint.style.display = 'none';
   crosshair.style.display = help.style.display = panel.style.display = wow.style.display = 'block';
 });
 controls.addEventListener('unlock', () => {
-  intro.style.display = 'flex';
+  // ESC frees the mouse to use the panel — do NOT reset to intro once started
+  if (started) {
+    resumeHint.style.display = 'block';
+    crosshair.style.display = 'none';
+  } else {
+    intro.style.display = 'flex';
+  }
 });
 
 // Movement state
 const keys = {};
-addEventListener('keydown', e => keys[e.code] = true);
+addEventListener('keydown', e => {
+  keys[e.code] = true;
+  // Time-of-day & light shortcuts work WITHOUT releasing the mouse
+  if (e.code === 'BracketLeft')  { dayAuto = false; manualT = Math.max(0, manualT - 0.03); syncDayUI(); }
+  if (e.code === 'BracketRight') { dayAuto = false; manualT = Math.min(1, manualT + 0.03); syncDayUI(); }
+  if (e.code === 'KeyP')         { dayAuto = !dayAuto; syncDayUI(); }
+  if (e.code === 'KeyL')         { pointLight.visible = !pointLight.visible; syncLightUI(); }
+  if (e.code === 'KeyK')         { spot.visible = !spot.visible; syncLightUI(); }
+});
 addEventListener('keyup',   e => keys[e.code] = false);
 
 let velY = 0, canJump = false;
 const PLAYER_H = 2.2, GRAV = 22, JUMP = 8;
 
 function move(dt) {
-  const speed = (keys['ShiftLeft'] || keys['ShiftRight'] ? 14 : 7) * dt;
-  const dir = new THREE.Vector3();
-  if (keys['KeyW']) dir.z += 1;
-  if (keys['KeyS']) dir.z -= 1;
-  if (keys['KeyA']) dir.x -= 1;
-  if (keys['KeyD']) dir.x += 1;
-  dir.normalize();
-  if (keys['KeyW'] || keys['KeyS']) controls.moveForward(dir.z * speed);
-  if (keys['KeyA'] || keys['KeyD']) controls.moveRight(dir.x * speed);
+  const sprinting = keys['ShiftLeft'] || keys['ShiftRight'];
+  const speed = (sprinting ? MOVE_SPEED * 2 : MOVE_SPEED) * dt;
+
+  // forward/back and left/right as independent inputs
+  let fwd = 0, side = 0;
+  if (keys['KeyW'] || keys['ArrowUp'])    fwd  += 1;
+  if (keys['KeyS'] || keys['ArrowDown'])  fwd  -= 1;
+  if (keys['KeyD'] || keys['ArrowRight']) side += 1;
+  if (keys['KeyA'] || keys['ArrowLeft'])  side -= 1;
+
+  // normalize diagonal so it isn't faster
+  if (fwd && side) { fwd *= 0.7071; side *= 0.7071; }
+
+  if (fwd)  controls.moveForward(fwd * speed);
+  if (side) controls.moveRight(side * speed);
 
   // jump + gravity
   if (keys['Space'] && canJump) { velY = JUMP; canJump = false; }
@@ -610,7 +646,7 @@ function move(dt) {
   obj.position.y += velY * dt;
   if (obj.position.y < PLAYER_H) { obj.position.y = PLAYER_H; velY = 0; canJump = true; }
 
-  // keep inside the 120×120 world
+  // keep inside the world
   obj.position.x = Math.max(-58, Math.min(58, obj.position.x));
   obj.position.z = Math.max(-58, Math.min(58, obj.position.z));
 }
@@ -625,17 +661,23 @@ const btnPoint = document.getElementById('btnPoint');
 const btnSpot = document.getElementById('btnSpot');
 const clockEl = document.getElementById('clock');
 
-btnDay.onclick = () => {
-  dayAuto = !dayAuto;
+btnDay.onclick = () => { dayAuto = !dayAuto; syncDayUI(); };
+slTime.oninput = () => { manualT = slTime.value / 100; dayAuto = false; syncDayUI(); };
+btnPoint.onclick = () => { pointLight.visible = !pointLight.visible; syncLightUI(); };
+btnSpot.onclick  = () => { spot.visible = !spot.visible; syncLightUI(); };
+
+// Keep the panel UI in sync whether changed by mouse OR keyboard
+function syncDayUI() {
   btnDay.textContent = dayAuto ? '☀ Day Cycle: AUTO' : '☀ Day Cycle: MANUAL';
   btnDay.classList.toggle('on', dayAuto);
-};
-slTime.oninput = () => { manualT = slTime.value / 100; dayAuto = false;
-  btnDay.textContent = '☀ Day Cycle: MANUAL'; btnDay.classList.remove('on'); };
-btnPoint.onclick = () => { pointLight.visible = !pointLight.visible;
-  btnPoint.textContent = pointLight.visible ? 'ON':'OFF'; btnPoint.classList.toggle('on', pointLight.visible); };
-btnSpot.onclick = () => { spot.visible = !spot.visible;
-  btnSpot.textContent = spot.visible ? 'ON':'OFF'; btnSpot.classList.toggle('on', spot.visible); };
+  if (!dayAuto) slTime.value = manualT * 100;
+}
+function syncLightUI() {
+  btnPoint.textContent = pointLight.visible ? 'ON' : 'OFF';
+  btnPoint.classList.toggle('on', pointLight.visible);
+  btnSpot.textContent  = spot.visible ? 'ON' : 'OFF';
+  btnSpot.classList.toggle('on', spot.visible);
+}
 
 function lerpColor(a, b, t) {
   const ca = new THREE.Color(a), cb = new THREE.Color(b);
