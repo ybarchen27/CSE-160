@@ -393,16 +393,18 @@ scene.add(hemi);
 const sun = new THREE.DirectionalLight(0xfff2d0, 1.4);   // directional light (animated across sky)
 sun.position.set(30, 50, 20);
 sun.castShadow = true;
-sun.shadow.mapSize.set(2048, 2048);
-sun.shadow.camera.left = -50; sun.shadow.camera.right = 50;
-sun.shadow.camera.top = 50; sun.shadow.camera.bottom = -50;
-sun.shadow.camera.far = 200;
+sun.shadow.mapSize.set(1536, 1536);   // 1536² is plenty here, cheaper than 2048²
+sun.shadow.camera.left = -40; sun.shadow.camera.right = 40;
+sun.shadow.camera.top = 40; sun.shadow.camera.bottom = -40;
+sun.shadow.camera.far = 160;
+sun.shadow.bias = -0.0005;
 scene.add(sun);
 scene.add(sun.target);
 
 const pointLight = new THREE.PointLight(0xffd27a, 1.2, 30, 2);  // point light
 pointLight.position.set(16, 3, 13);
-pointLight.castShadow = true;
+// (no shadow map — point-light shadows are 6-face cube renders, the most
+//  expensive kind; the light still illuminates, just without casting shadows)
 scene.add(pointLight);
 // visible bulb for the point light
 const bulb = new THREE.Mesh(
@@ -414,7 +416,7 @@ pointLight.add(bulb);
 const spot = new THREE.SpotLight(0xffffff, 2.0, 35, Math.PI / 7, 0.4, 1.5); // spot light
 spot.position.set(16, 7, 22);
 spot.target.position.set(16, 0, 18);
-spot.castShadow = true;
+// (no shadow map — keeps the per-frame cost down; sun provides the shadows)
 scene.add(spot); scene.add(spot.target);
 
 // ════════════════════════════════════════════════════════════
@@ -575,15 +577,13 @@ house.add(chimney); countShape();
 //  loaded once from ./models/ then cloned around the property. A few
 //  procedural bushes/rocks remain for shape variety and count.
 // ════════════════════════════════════════════════════════════
-const matStone  = new THREE.MeshStandardMaterial({ color: 0x888d92, roughness: 1 });
-
 const modelLoader = new GLTFLoader();
 
 // Load a glTF, then place clones at the given [x, z, scale, rotationY] spots.
 function loadAndScatter(url, spots, baseScale) {
   modelLoader.load(url, (gltf) => {
     const src = gltf.scene;
-    src.traverse(o => { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+    src.traverse(o => { if (o.isMesh) { o.castShadow = false; o.receiveShadow = true; } });
     spots.forEach(([x, z, s = 1, ry = Math.random() * Math.PI * 2]) => {
       const inst = src.clone(true);
       inst.scale.setScalar(baseScale * s);
@@ -609,29 +609,7 @@ loadAndScatter('models/tree_stump_01/tree_stump_01_1k.gltf', [
   [12, 30, 1.0], [27, 24, 1.2], [4, 16, 0.9]
 ], 1.0);
 
-// A few low procedural bushes near the house (shape variety + count)
-const matLeaf = new THREE.MeshStandardMaterial({ color: 0x2e6b2a, roughness: 1 });
-for (let i = 0; i < 6; i++) {
-  const bush = new THREE.Mesh(new THREE.SphereGeometry(0.6 + Math.random()*0.4, 10, 10), matLeaf);
-  bush.position.set(8 + Math.random()*16, 0.4, 22 + Math.random()*4);
-  bush.castShadow = true; scene.add(bush); countShape();
-}
-
-// Rocks (icosahedrons — another primitive type)
-for (let i = 0; i < 6; i++) {
-  const r = new THREE.Mesh(new THREE.IcosahedronGeometry(0.5 + Math.random()*0.5, 0), matStone);
-  r.position.set(2 + Math.random()*30, 0.4, 2 + Math.random()*30);
-  r.castShadow = true; r.rotation.set(Math.random(),Math.random(),Math.random());
-  scene.add(r); countShape();
-}
-
-// Garden well (cylinder + torus rim)
-const well = new THREE.Mesh(new THREE.CylinderGeometry(1, 1, 1.2, 16), matStone);
-well.position.set(6, 0.6, 6); well.castShadow = true; scene.add(well); countShape();
-const wellRim = new THREE.Mesh(new THREE.TorusGeometry(1, 0.15, 8, 20), matStone);
-wellRim.position.set(6, 1.2, 6); wellRim.rotation.x = Math.PI/2; scene.add(wellRim); countShape();
-
-// Fence posts (cylinders) around front
+// Fence posts (cylinders) around front — wood-textured, fits the property
 const matFence = new THREE.MeshStandardMaterial({ map: texWood, roughness: .8 });
 for (let x = 2; x <= 30; x += 4) {
   const post = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.12, 1.4, 6), matFence);
@@ -670,7 +648,7 @@ const lanterns = [];
 for (let i = 0; i < 3; i++) {
   const lant = new THREE.Mesh(new THREE.SphereGeometry(0.35, 12, 12),
     new THREE.MeshStandardMaterial({ color: 0xffcf6b, emissive: 0xffaa33, emissiveIntensity: 1 }));
-  lant.castShadow = true;
+  lant.castShadow = false;
   scene.add(lant); countShape();
   lanterns.push({ mesh: lant, phase: i * (Math.PI * 2 / 3) });
 }
@@ -898,10 +876,16 @@ const clock = new THREE.Clock();
 function updateCounter() { document.getElementById('shapeCount').textContent = SHAPE_COUNT; }
 updateCounter();
 
+let frameNum = 0;
 function animate() {
   requestAnimationFrame(animate);
   const dt = Math.min(clock.getDelta(), 0.05);
   const t = clock.elapsedTime;
+  frameNum++;
+
+  // The sun moves slowly, so its shadow map doesn't need a full re-render
+  // every frame. Update it every 3rd frame — invisible, but ~3x cheaper.
+  sun.shadow.autoUpdate = (frameNum % 3 === 0);
 
   if (controls.isLocked) move(dt);
 
