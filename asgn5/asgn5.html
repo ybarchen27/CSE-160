@@ -309,9 +309,11 @@ const skyB = makeSkyDome();
 scene.add(skyA); scene.add(skyB);
 scene.background = null; // we use the dome instead of a flat background
 
-// Load each slot's texture by exact filename. Picks EXRLoader for .exr,
-// TextureLoader for .jpg/.png. If the file is missing, the procedural sky
-// for that slot stays in place.
+// Load each slot's texture by exact filename, ONE AT A TIME in the
+// background (sequential queue). Decoding EXR is CPU-heavy and runs on the
+// main thread, so loading all 12 at once causes a launch hitch. Loading them
+// one after another keeps the main thread responsive. Until a slot's real
+// image arrives, its procedural fallback sky is used.
 const exrLoader = new EXRLoader();
 const jpgLoader = new THREE.TextureLoader();
 const SKY_PATH = 'skybox/';
@@ -322,18 +324,39 @@ function applyTex(slot, tex, isEXR) {
   slot.tex = tex;
 }
 
-SKY_SLOTS.forEach(slot => {
-  slot.tex = makeProceduralSky(slot);              // immediate fallback
-  if (!slot.file) return;
+// Every slot starts on its procedural fallback so the sky is never blank.
+SKY_SLOTS.forEach(slot => { slot.tex = makeProceduralSky(slot); });
+
+// Build the load order: the slot nearest the START time loads first (so the
+// sky you actually see on launch resolves soonest), then the rest in order.
+// De-duplicate by filename (night appears twice as the 0.0/1.0 wrap).
+const START_T = 0.0; // auto cycle begins near t=0 (night) on launch
+const queue = [];
+const seenFiles = new Set();
+SKY_SLOTS
+  .map((slot, i) => ({ slot, i }))
+  .filter(({ slot }) => slot.file && !seenFiles.has(slot.file) && seenFiles.add(slot.file))
+  .sort((a, b) => Math.abs(a.slot.t - START_T) - Math.abs(b.slot.t - START_T))
+  .forEach(({ slot }) => queue.push(slot));
+
+// Apply a loaded texture to ALL slots sharing that filename (handles the wrap).
+function applyToAll(file, tex, isEXR) {
+  SKY_SLOTS.forEach(s => { if (s.file === file) applyTex(s, tex, isEXR); });
+}
+
+function loadNext() {
+  const slot = queue.shift();
+  if (!slot) return;                                   // queue drained
   const isEXR = slot.file.toLowerCase().endsWith('.exr');
   const loader = isEXR ? exrLoader : jpgLoader;
   loader.load(
     SKY_PATH + slot.file,
-    (tex) => applyTex(slot, tex, isEXR),
+    (tex) => { applyToAll(slot.file, tex, isEXR); loadNext(); },  // then next
     undefined,
-    () => { /* file missing → keep procedural sky silently */ }
+    () => { loadNext(); }                              // missing → skip to next
   );
-});
+}
+loadNext();   // start the background chain
 
 // Pick the two adjacent slots for time t and the blend factor between them.
 function skyForTime(t) {
