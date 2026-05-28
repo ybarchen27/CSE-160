@@ -31,6 +31,11 @@
   /* ── HUD ── */
   #crosshair{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);
     color:rgba(255,255,255,.7);font-size:20px;pointer-events:none;z-index:10;display:none}
+  #resumeHint{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);
+    background:rgba(10,14,22,.9);border:1px solid rgba(255,215,0,.4);border-radius:10px;
+    padding:14px 24px;font-size:14px;color:#f0ddb0;z-index:25;display:none;text-align:center;
+    pointer-events:none}
+  #resumeHint b{color:#ffd700}
   #help{position:fixed;bottom:14px;left:50%;transform:translateX(-50%);
     background:rgba(0,0,0,.55);backdrop-filter:blur(6px);padding:8px 20px;border-radius:10px;
     font-size:12px;color:#cdd6e4;pointer-events:none;z-index:10;display:none;white-space:nowrap;
@@ -72,7 +77,8 @@
 
 <!-- ════ HUD ════ -->
 <div id="crosshair">✛</div>
-<div id="help"><b>WASD</b> move · <b>Mouse</b> look · <b>Space</b> jump · <b>Shift</b> sprint · <b>ESC</b> release</div>
+<div id="resumeHint">🖱 Mouse released — adjust the panel, then <b>click anywhere</b> to resume walking</div>
+<div id="help"><b>WASD</b> move · <b>Mouse</b> look · <b>Space</b> jump · <b>Shift</b> sprint · <b>[ ]</b> time · <b>P</b> auto · <b>L/K</b> lights · <b>ESC</b> free mouse</div>
 
 <div id="panel">
   <h3>⚙ Scene Controls</h3>
@@ -113,6 +119,7 @@
 import * as THREE from 'three';
 import { PointerLockControls } from 'three/addons/controls/PointerLockControls.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { EXRLoader } from 'three/addons/loaders/EXRLoader.js';
 
 // ════════════════════════════════════════════════════════════
 //  SCENE / RENDERER / CAMERA
@@ -125,11 +132,15 @@ renderer.setSize(innerWidth, innerHeight);
 renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;   // keeps HDR/EXR skies from blowing out
+renderer.toneMappingExposure = 1.0;
 document.body.appendChild(renderer.domElement);
 
 // REQUIREMENT: perspective camera
 const camera = new THREE.PerspectiveCamera(70, innerWidth / innerHeight, 0.1, 500);
-camera.position.set(16, 2.2, 40);
+camera.position.set(16, 2.2, 34);   // out front, facing the house (-z)
+camera.lookAt(16, 2.5, 13);
 
 addEventListener('resize', () => {
   camera.aspect = innerWidth / innerHeight;
@@ -202,39 +213,149 @@ const texGrass     = makeGrassTexture();
 const texWood      = makeWoodTexture();
 
 // ════════════════════════════════════════════════════════════
-//  SKYBOX — procedural cubemap (REQUIREMENT: skybox)
+//  SKYBOX — multi-slot equirectangular skydome with crossfade
+//  (REQUIREMENT: skybox). Drop your own panorama JPGs into ./skybox/
+//  Any missing file falls back to a procedurally generated sky for
+//  that time of day, so the page always works.
 // ════════════════════════════════════════════════════════════
-function makeSkyFace(top, bottom, withSun = false) {
-  const c = document.createElement('canvas'); c.width = c.height = 512;
+
+// Time-of-day slots around the 24h clock (t in [0,1)).
+// `file` = exact filename in ./skybox/ (no rename needed). If a file is
+// missing, that slot falls back to a procedural sky (top/bot/stars).
+// These 12 Qwantani skies progress midnight → midnight.
+const SKY_SLOTS = [
+  { t: 0.000, file: 'qwantani_night_1k.exr',          top:'#070b18', bot:'#141d33', stars:true  },
+  { t: 0.080, file: 'qwantani_moon_noon_1k.exr',      top:'#0a1020', bot:'#1a2438', stars:true  },
+  { t: 0.170, file: 'qwantani_dawn_1k.exr',           top:'#2b3a63', bot:'#c97a52', stars:false },
+  { t: 0.230, file: 'qwantani_sunrise_1k.exr',        top:'#3a4a78', bot:'#e8915a', stars:false },
+  { t: 0.300, file: 'qwantani_morning_1k.exr',        top:'#3f6ea8', bot:'#f0c98a', stars:false },
+  { t: 0.380, file: 'qwantani_mid_morning_1k.exr',    top:'#357bb5', bot:'#cfe0ee', stars:false },
+  { t: 0.480, file: 'qwantani_noon_1k.exr',           top:'#2a5d9e', bot:'#bcd6ef', stars:false },
+  { t: 0.560, file: 'qwantani_1k.exr',                top:'#2a5d9e', bot:'#bcd6ef', stars:false },
+  { t: 0.650, file: 'qwantani_afternoon_1k.exr',      top:'#3066a0', bot:'#cdd9e6', stars:false },
+  { t: 0.730, file: 'qwantani_late_afternoon_1k.exr', top:'#3a5a8a', bot:'#e6c08a', stars:false },
+  { t: 0.810, file: 'qwantani_sunset_1k.exr',         top:'#39376e', bot:'#e0793a', stars:false },
+  { t: 0.890, file: 'qwantani_dusk_1_1k.exr',         top:'#1e2347', bot:'#7a4a6e', stars:false },
+  { t: 1.000, file: 'qwantani_night_1k.exr',          top:'#070b18', bot:'#141d33', stars:true  }, // wrap
+];
+
+// Build a procedural equirectangular sky texture (2:1) for a slot.
+function makeProceduralSky(slot) {
+  const W = 1024, H = 512;
+  const c = document.createElement('canvas'); c.width = W; c.height = H;
   const x = c.getContext('2d');
-  const g = x.createLinearGradient(0, 0, 0, 512);
-  g.addColorStop(0, top); g.addColorStop(1, bottom);
-  x.fillStyle = g; x.fillRect(0, 0, 512, 512);
-  // scattered clouds
-  x.fillStyle = 'rgba(255,255,255,0.35)';
-  for (let i = 0; i < 14; i++) {
-    const cx = Math.random() * 512, cy = Math.random() * 230, r = 18 + Math.random() * 40;
-    for (let b = 0; b < 5; b++) {
-      x.beginPath();
-      x.arc(cx + b * r * 0.7 - r, cy + Math.sin(b) * 8, r * (0.6 + Math.random() * 0.4), 0, 7);
-      x.fill();
+  const g = x.createLinearGradient(0, 0, 0, H);
+  g.addColorStop(0, slot.top);
+  g.addColorStop(0.55, slot.bot);
+  g.addColorStop(1, slot.bot);
+  x.fillStyle = g; x.fillRect(0, 0, W, H);
+
+  if (slot.stars) {
+    // starfield in the upper sky
+    for (let i = 0; i < 600; i++) {
+      const sx = Math.random() * W, sy = Math.random() * H * 0.7;
+      const r = Math.random() * 1.4;
+      x.fillStyle = `rgba(255,255,255,${0.3 + Math.random() * 0.7})`;
+      x.beginPath(); x.arc(sx, sy, r, 0, 7); x.fill();
+    }
+    // soft moon
+    const mx = W * 0.7, my = H * 0.25, mr = 26;
+    const mg = x.createRadialGradient(mx, my, 0, mx, my, mr * 2.2);
+    mg.addColorStop(0, 'rgba(245,245,225,0.95)');
+    mg.addColorStop(0.4, 'rgba(220,220,200,0.6)');
+    mg.addColorStop(1, 'rgba(220,220,200,0)');
+    x.fillStyle = mg; x.beginPath(); x.arc(mx, my, mr * 2.2, 0, 7); x.fill();
+  } else {
+    // soft layered clouds
+    for (let i = 0; i < 22; i++) {
+      const cx = Math.random() * W, cy = Math.random() * H * 0.5;
+      const r = 30 + Math.random() * 70;
+      const cg = x.createRadialGradient(cx, cy, 0, cx, cy, r);
+      cg.addColorStop(0, 'rgba(255,255,255,0.4)');
+      cg.addColorStop(1, 'rgba(255,255,255,0)');
+      x.fillStyle = cg;
+      for (let b = 0; b < 4; b++) {
+        x.beginPath();
+        x.arc(cx + b * r * 0.5 - r * 0.7, cy + Math.sin(b) * 6, r * (0.6 + Math.random()*0.4), 0, 7);
+        x.fill();
+      }
+    }
+    // sun glow near horizon for dawn/dusk (warm bottom)
+    const sg = x.createLinearGradient(0, H * 0.5, 0, H);
+    sg.addColorStop(0, 'rgba(255,200,120,0)');
+    sg.addColorStop(1, 'rgba(255,180,90,0.25)');
+    x.fillStyle = sg; x.fillRect(0, H * 0.5, W, H * 0.5);
+  }
+
+  const tex = new THREE.CanvasTexture(c);
+  tex.mapping = THREE.EquirectangularReflectionMapping;
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
+}
+
+// Two skydome spheres we crossfade between (A = current, B = next).
+const SKY_R = 240;
+function makeSkyDome() {
+  const geo = new THREE.SphereGeometry(SKY_R, 40, 24);
+  const mat = new THREE.MeshBasicMaterial({
+    side: THREE.BackSide, transparent: true, opacity: 1, depthWrite: false, fog: false
+  });
+  const m = new THREE.Mesh(geo, mat);
+  m.renderOrder = -1;     // draw behind everything
+  return m;
+}
+const skyA = makeSkyDome();
+const skyB = makeSkyDome();
+scene.add(skyA); scene.add(skyB);
+scene.background = null; // we use the dome instead of a flat background
+
+// Load each slot's texture by exact filename. Picks EXRLoader for .exr,
+// TextureLoader for .jpg/.png. If the file is missing, the procedural sky
+// for that slot stays in place.
+const exrLoader = new EXRLoader();
+const jpgLoader = new THREE.TextureLoader();
+const SKY_PATH = 'skybox/';
+
+function applyTex(slot, tex, isEXR) {
+  tex.mapping = THREE.EquirectangularReflectionMapping;
+  if (!isEXR) tex.colorSpace = THREE.SRGBColorSpace; // EXR is linear; JPG is sRGB
+  slot.tex = tex;
+}
+
+SKY_SLOTS.forEach(slot => {
+  slot.tex = makeProceduralSky(slot);              // immediate fallback
+  if (!slot.file) return;
+  const isEXR = slot.file.toLowerCase().endsWith('.exr');
+  const loader = isEXR ? exrLoader : jpgLoader;
+  loader.load(
+    SKY_PATH + slot.file,
+    (tex) => applyTex(slot, tex, isEXR),
+    undefined,
+    () => { /* file missing → keep procedural sky silently */ }
+  );
+});
+
+// Pick the two adjacent slots for time t and the blend factor between them.
+function skyForTime(t) {
+  for (let i = 0; i < SKY_SLOTS.length - 1; i++) {
+    const a = SKY_SLOTS[i], b = SKY_SLOTS[i + 1];
+    if (t >= a.t && t <= b.t) {
+      const f = (b.t - a.t) > 0 ? (t - a.t) / (b.t - a.t) : 0;
+      return { a, b, f };
     }
   }
-  return c;
+  const last = SKY_SLOTS[SKY_SLOTS.length - 1];
+  return { a: last, b: last, f: 0 };
 }
-function buildSkybox() {
-  const top = '#2a5d9e', bot = '#bcd6ef';
-  const faces = [
-    makeSkyFace(top, bot), makeSkyFace(top, bot),
-    makeSkyFace('#1f4e8a', '#3a6fa8'),                 // up
-    makeSkyFace('#6a8a5a', '#4a7c34'),                 // down (toward ground)
-    makeSkyFace(top, bot), makeSkyFace(top, bot)
-  ];
-  const loader = new THREE.CubeTextureLoader();
-  const urls = faces.map(c => c.toDataURL());
-  return loader.load(urls);
+
+// Apply the crossfaded sky for time t.
+function updateSky(t) {
+  const { a, b, f } = skyForTime(t);
+  if (skyA.material.map !== a.tex) skyA.material.map = a.tex, skyA.material.needsUpdate = true;
+  if (skyB.material.map !== b.tex) skyB.material.map = b.tex, skyB.material.needsUpdate = true;
+  skyA.material.opacity = 1;        // base layer fully opaque
+  skyB.material.opacity = f;        // next layer fades in over it
 }
-scene.background = buildSkybox();
 
 // ════════════════════════════════════════════════════════════
 //  LIGHTS — REQUIREMENT: 3+ different light types
@@ -257,7 +378,7 @@ scene.add(sun);
 scene.add(sun.target);
 
 const pointLight = new THREE.PointLight(0xffd27a, 1.2, 30, 2);  // point light
-pointLight.position.set(16, 6, 13);
+pointLight.position.set(16, 3, 13);
 pointLight.castShadow = true;
 scene.add(pointLight);
 // visible bulb for the point light
@@ -268,8 +389,8 @@ const bulb = new THREE.Mesh(
 pointLight.add(bulb);
 
 const spot = new THREE.SpotLight(0xffffff, 2.0, 35, Math.PI / 7, 0.4, 1.5); // spot light
-spot.position.set(16, 7, 19.5);
-spot.target.position.set(16, 0, 19.5);
+spot.position.set(16, 7, 22);
+spot.target.position.set(16, 0, 18);
 spot.castShadow = true;
 scene.add(spot); scene.add(spot.target);
 
@@ -294,8 +415,11 @@ scene.add(house);
 const matRed  = new THREE.MeshStandardMaterial({ map: texBrickRed, roughness: .9 });
 const matSand = new THREE.MeshStandardMaterial({ map: texBrickSand, roughness: .9 });
 const matWood = new THREE.MeshStandardMaterial({ map: texWood, roughness: .7 });
-const matGlass= new THREE.MeshStandardMaterial({ color: 0x88c0e0, transparent:true, opacity:.45,
-                                                 roughness:.1, metalness:.2 });
+const matGlass= new THREE.MeshPhysicalMaterial({
+  color: 0xcfe8f5, transparent: true, opacity: 0.18,
+  roughness: 0.05, metalness: 0, transmission: 0.0,
+  side: THREE.DoubleSide, depthWrite: false
+});
 
 function addBox(group, w, h, d, x, y, z, mat) {
   const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat);
@@ -306,55 +430,121 @@ function addBox(group, w, h, d, x, y, z, mat) {
   return m;
 }
 
-// Ground floor (red brick) — four walls as boxes
-const HW = 13, HD = 12, T = 0.4;
-addBox(house, HW, 3, T, 16, 1.5, 7,  matRed);          // back wall
-addBox(house, HW, 3, T, 16, 1.5, 19, matRed);          // front (with door gap handled visually)
-addBox(house, T, 3, HD, 9.5, 1.5, 13, matRed);         // left wall
-addBox(house, T, 3, HD, 22.5,1.5, 13, matRed);         // right wall
+// ── House dimensions, centered at (CX, CZ) ──
+const CX = 16, CZ = 13;          // house center on the map
+const HALF_W = 6, HALF_D = 5;    // half footprint (so 12 x 10 building)
+const WALL_T = 0.4;
+const FLOOR_H = 3.4;             // single-storey wall height
+const matFrame = new THREE.MeshStandardMaterial({ color: 0x3a2418, roughness: .8 });
 
-// Upper floor (sandstone) — four walls
-addBox(house, HW, 3, T, 16, 4.5, 7,  matSand);
-addBox(house, HW, 3, T, 16, 4.5, 19, matSand);
-addBox(house, T, 3, HD, 9.5, 4.5, 13, matSand);
-addBox(house, T, 3, HD, 22.5,4.5, 13, matSand);
+// Build a wall with REAL openings: instead of one slab, we build the wall as
+// strips (below / above / left / right of each opening) so each opening is an
+// actual hole you can see through. `holes` are rectangular gaps in the wall.
+//   wall spans `len` along its axis, centered at (cx,cy,cz), height `h`.
+//   horizontal=true → wall runs along X (faces +/-Z). Otherwise runs along Z.
+function buildWallWithHoles(cx, cy, cz, len, h, t, mat, horizontal, holes = [], frameThem = true) {
+  const yB = cy - h / 2, yT = cy + h / 2;
+  // Sort holes by their along-axis center
+  holes = holes.slice().sort((a, b) => a.u - b.u);
 
-// Floor slab + second-storey slab
-addBox(house, HW, 0.3, HD, 16, 0.15, 13, matWood);
-addBox(house, HW, 0.3, HD, 16, 3.0,  13, matWood);
+  // Helper to drop a wall segment given along-axis span [a,b] and vertical span [v0,v1]
+  const seg = (a, b, v0, v1) => {
+    if (b - a < 0.01 || v1 - v0 < 0.01) return;
+    const segLen = b - a, segH = v1 - v0;
+    const cu = (a + b) / 2, cv = (v0 + v1) / 2;
+    if (horizontal) addBox(house, segLen, segH, t, cx + cu, cv, cz, mat);
+    else            addBox(house, t, segH, segLen, cx, cv, cz + cu, mat);
+  };
 
-// Roof (pyramid = cone with 4 segments — a different primitive: ConeGeometry)
+  const half = len / 2;
+  let cursor = -half;
+  for (const hole of holes) {
+    const hl = hole.u - hole.ww / 2, hr = hole.u + hole.ww / 2;
+    const hb = hole.v0, ht = hole.v1;
+    // wall strip to the left of this hole (full height)
+    seg(cursor, hl, yB, yT);
+    // strip below the hole
+    seg(hl, hr, yB, hb);
+    // strip above the hole
+    seg(hl, hr, ht, yT);
+    cursor = hr;
+    // thin frame around the opening (decorative, still see-through)
+    if (frameThem) {
+      const fy = (hb + ht) / 2, fh = ht - hb;
+      if (horizontal) {
+        addBox(house, 0.12, fh + 0.2, t + 0.1, cx + hl, fy, cz, matFrame);
+        addBox(house, 0.12, fh + 0.2, t + 0.1, cx + hr, fy, cz, matFrame);
+        addBox(house, hole.ww + 0.2, 0.12, t + 0.1, cx + hole.u, hb, cz, matFrame);
+        addBox(house, hole.ww + 0.2, 0.12, t + 0.1, cx + hole.u, ht, cz, matFrame);
+        // clear glass pane filling the opening
+        if (hole.glaze) {
+          const pane = new THREE.Mesh(new THREE.PlaneGeometry(hole.ww, ht - hb), matGlass);
+          pane.position.set(cx + hole.u, fy, cz);
+          house.add(pane); countShape();
+          // a single muntin bar across the glass for a paned look
+          addBox(house, hole.ww, 0.06, 0.05, cx + hole.u, fy, cz, matFrame);
+        }
+      } else {
+        addBox(house, t + 0.1, fh + 0.2, 0.12, cx, fy, cz + hl, matFrame);
+        addBox(house, t + 0.1, fh + 0.2, 0.12, cx, fy, cz + hr, matFrame);
+        addBox(house, t + 0.1, 0.12, hole.ww + 0.2, cx, hb, cz + hole.u, matFrame);
+        addBox(house, t + 0.1, 0.12, hole.ww + 0.2, cx, ht, cz + hole.u, matFrame);
+        // clear glass pane filling the opening
+        if (hole.glaze) {
+          const pane = new THREE.Mesh(new THREE.PlaneGeometry(hole.ww, ht - hb), matGlass);
+          pane.position.set(cx, fy, cz + hole.u);
+          pane.rotation.y = Math.PI / 2;
+          house.add(pane); countShape();
+          addBox(house, 0.05, 0.06, hole.ww, cx, fy, cz + hole.u, matFrame);
+        }
+      }
+    }
+  }
+  // final strip after the last hole
+  seg(cursor, half, yB, yT);
+}
+
+const fzC = CZ + HALF_D;   // front (+z, where the player approaches)
+const bzC = CZ - HALF_D;   // back
+const lxC = CX - HALF_W;   // left
+const rxC = CX + HALF_W;   // right
+const yC  = FLOOR_H / 2;   // wall vertical center
+
+// window opening template: from y=1.2 to y=2.6
+const W = (u) => ({ u, ww: 1.5, v0: 1.2, v1: 2.6, glaze: true });
+
+// back wall (red brick) — two windows
+buildWallWithHoles(CX, yC, bzC, HALF_W*2, FLOOR_H, WALL_T, matRed, true,  [W(-3), W(3)]);
+// left wall — two windows
+buildWallWithHoles(lxC, yC, CZ, HALF_D*2, FLOOR_H, WALL_T, matRed, false, [W(-2.5), W(2.5)]);
+// right wall — two windows
+buildWallWithHoles(rxC, yC, CZ, HALF_D*2, FLOOR_H, WALL_T, matRed, false, [W(-2.5), W(2.5)]);
+// front wall — a window on each side of a DOOR opening (door = floor-height gap)
+buildWallWithHoles(CX, yC, fzC, HALF_W*2, FLOOR_H, WALL_T, matRed, true, [
+  W(-3.5),
+  { u: 0, ww: 2.0, v0: 0, v1: 2.7 },   // door opening (down to the floor)
+  W(3.5)
+]);
+// wood door set into the doorway, swung slightly open
+const door = addBox(house, 1.8, 2.5, 0.14, CX - 0.9, 1.25, fzC + 0.05, matWood);
+door.rotation.y = -0.5;
+door.position.x = CX - 0.6;
+
+// ── ROOF: proper 4-sided pyramid sitting ON TOP, slightly overhanging ──
 const roof = new THREE.Mesh(
-  new THREE.ConeGeometry(10.5, 3.5, 4),
-  new THREE.MeshStandardMaterial({ color: 0x5a3320, roughness: .8 })
+  new THREE.ConeGeometry(HALF_W * 1.5, 3.0, 4),   // radius > footprint → overhang
+  new THREE.MeshStandardMaterial({ color: 0x5a3320, roughness: .85 })
 );
-roof.position.set(16, 7.7, 13);
+roof.position.set(CX, FLOOR_H + 1.5, CZ);
 roof.rotation.y = Math.PI / 4;
 roof.castShadow = true;
 house.add(roof); countShape();
 
-// Chimney (cylinder)
-const chimney = new THREE.Mesh(
-  new THREE.CylinderGeometry(0.5, 0.6, 2.5, 12),
-  matRed
-);
-chimney.position.set(20, 8, 10);
+// Chimney (cylinder) poking through the roof
+const chimney = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.6, 2.8, 12), matRed);
+chimney.position.set(CX + 3, FLOOR_H + 1.8, CZ - 2);
 chimney.castShadow = true;
 house.add(chimney); countShape();
-
-// Door (wood box) + glass windows (boxes)
-addBox(house, 1.8, 2.4, 0.2, 16, 1.2, 19.1, matWood);  // door
-const winPos = [
-  [12,1.5,19.1],[20,1.5,19.1],[12,4.5,19.1],[20,4.5,19.1],
-  [9.4,1.5,11],[9.4,1.5,15],[22.6,1.5,11],[22.6,1.5,15],
-  [9.4,4.5,13],[22.6,4.5,13],[16,4.5,7.1]
-];
-winPos.forEach(([x,y,z]) => {
-  const horiz = (z > 7.2 || z < 6.9) ? false : true;
-  const w = (x===9.4||x===22.6) ? 0.15 : 1.4;
-  const d = (x===9.4||x===22.6) ? 1.4 : 0.15;
-  addBox(house, w, 1.3, d, x, y, z, matGlass);
-});
 
 // ════════════════════════════════════════════════════════════
 //  DECORATIVE PRIMITIVES around the property (variety + count)
@@ -381,7 +571,7 @@ function makeTree(x, z, scale = 1) {
 // Bushes (spheres)
 for (let i = 0; i < 8; i++) {
   const bush = new THREE.Mesh(new THREE.SphereGeometry(0.6 + Math.random()*0.4, 10, 10), matLeaf);
-  bush.position.set(10 + Math.random()*14, 0.4, 20.5 + Math.random()*1.2);
+  bush.position.set(8 + Math.random()*16, 0.4, 22 + Math.random()*4);
   bush.castShadow = true; scene.add(bush); countShape();
 }
 
@@ -471,7 +661,7 @@ function buildProceduralGLB() {
 const gltfLoader = new GLTFLoader();
 if (MODEL_URL) {
   gltfLoader.load(MODEL_URL, (g) => {
-    const m = g.scene; m.position.set(13, 0, 22); m.scale.setScalar(1);
+    const m = g.scene; m.position.set(11, 0, 21); m.scale.setScalar(1);
     m.traverse(o => { if (o.isMesh) o.castShadow = true; });
     scene.add(m); countShape(); updateCounter();
   });
@@ -484,7 +674,7 @@ if (MODEL_URL) {
       const blob = new Blob([glb], { type: 'model/gltf-binary' });
       const url = URL.createObjectURL(blob);
       gltfLoader.load(url, (g) => {
-        const m = g.scene; m.position.set(13, 0, 22);
+        const m = g.scene; m.position.set(11, 0, 21);
         m.traverse(o => { if (o.isMesh) o.castShadow = true; });
         scene.add(m); countShape(); updateCounter();
         URL.revokeObjectURL(url);
@@ -497,50 +687,96 @@ if (MODEL_URL) {
 //  CONTROLS — PointerLockControls (REQUIREMENT: camera controls)
 // ════════════════════════════════════════════════════════════
 const controls = new PointerLockControls(camera, renderer.domElement);
-scene.add(controls.getObject());
+scene.add(camera);   // r160: the camera itself is the controlled object
 
 const intro = document.getElementById('intro');
 const crosshair = document.getElementById('crosshair');
 const help = document.getElementById('help');
 const panel = document.getElementById('panel');
 const wow = document.getElementById('wow');
+const resumeHint = document.getElementById('resumeHint');
 
-document.getElementById('startBtn').addEventListener('click', () => controls.lock());
+function tryLock() {
+  try { controls.lock(); }
+  catch (err) { console.warn('lock() failed:', err); }
+}
+
+document.getElementById('startBtn').addEventListener('click', (e) => {
+  e.preventDefault();
+  tryLock();
+});
+
+// Click anywhere on the canvas to (re)capture the mouse after ESC.
+// Only when we've started and aren't already locked.
+renderer.domElement.addEventListener('mousedown', () => {
+  if (!controls.isLocked && started) tryLock();
+});
+
+// Surface any pointer-lock errors (e.g. browser cooldown) instead of silently failing
+document.addEventListener('pointerlockerror', () => {
+  resumeHint.innerHTML = '⚠ Browser blocked mouse capture — wait a second and <b>click again</b>.';
+  resumeHint.style.display = 'block';
+}, false);
+
+let started = false;
 controls.addEventListener('lock', () => {
+  started = true;
   intro.style.display = 'none';
+  resumeHint.style.display = 'none';
   crosshair.style.display = help.style.display = panel.style.display = wow.style.display = 'block';
 });
 controls.addEventListener('unlock', () => {
-  intro.style.display = 'flex';
+  // ESC frees the mouse to use the panel — do NOT reset to intro once started
+  if (started) {
+    resumeHint.innerHTML = '🖱 Mouse released — adjust the panel, then <b>click anywhere</b> to resume walking';
+    resumeHint.style.display = 'block';
+    crosshair.style.display = 'none';
+  } else {
+    intro.style.display = 'flex';
+  }
 });
 
 // Movement state
 const keys = {};
-addEventListener('keydown', e => keys[e.code] = true);
+addEventListener('keydown', e => {
+  keys[e.code] = true;
+  // Time-of-day & light shortcuts work WITHOUT releasing the mouse
+  if (e.code === 'BracketLeft')  { dayAuto = false; manualT = Math.max(0, manualT - 0.03); syncDayUI(); }
+  if (e.code === 'BracketRight') { dayAuto = false; manualT = Math.min(1, manualT + 0.03); syncDayUI(); }
+  if (e.code === 'KeyP')         { dayAuto = !dayAuto; syncDayUI(); }
+  if (e.code === 'KeyL')         { pointLight.visible = !pointLight.visible; syncLightUI(); }
+  if (e.code === 'KeyK')         { spot.visible = !spot.visible; syncLightUI(); }
+});
 addEventListener('keyup',   e => keys[e.code] = false);
 
 let velY = 0, canJump = false;
-const PLAYER_H = 2.2, GRAV = 22, JUMP = 8;
+const PLAYER_H = 2.2, GRAV = 22, JUMP = 8, MOVE_SPEED = 7;
 
 function move(dt) {
-  const speed = (keys['ShiftLeft'] || keys['ShiftRight'] ? 14 : 7) * dt;
-  const dir = new THREE.Vector3();
-  if (keys['KeyW']) dir.z += 1;
-  if (keys['KeyS']) dir.z -= 1;
-  if (keys['KeyA']) dir.x -= 1;
-  if (keys['KeyD']) dir.x += 1;
-  dir.normalize();
-  if (keys['KeyW'] || keys['KeyS']) controls.moveForward(dir.z * speed);
-  if (keys['KeyA'] || keys['KeyD']) controls.moveRight(dir.x * speed);
+  const sprinting = keys['ShiftLeft'] || keys['ShiftRight'];
+  const speed = (sprinting ? MOVE_SPEED * 2 : MOVE_SPEED) * dt;
+
+  // forward/back and left/right as independent inputs
+  let fwd = 0, side = 0;
+  if (keys['KeyW'] || keys['ArrowUp'])    fwd  += 1;
+  if (keys['KeyS'] || keys['ArrowDown'])  fwd  -= 1;
+  if (keys['KeyD'] || keys['ArrowRight']) side += 1;
+  if (keys['KeyA'] || keys['ArrowLeft'])  side -= 1;
+
+  // normalize diagonal so it isn't faster
+  if (fwd && side) { fwd *= 0.7071; side *= 0.7071; }
+
+  if (fwd)  controls.moveForward(fwd * speed);
+  if (side) controls.moveRight(side * speed);
 
   // jump + gravity
   if (keys['Space'] && canJump) { velY = JUMP; canJump = false; }
   velY -= GRAV * dt;
-  const obj = controls.getObject();
+  const obj = camera;
   obj.position.y += velY * dt;
   if (obj.position.y < PLAYER_H) { obj.position.y = PLAYER_H; velY = 0; canJump = true; }
 
-  // keep inside the 120×120 world
+  // keep inside the world
   obj.position.x = Math.max(-58, Math.min(58, obj.position.x));
   obj.position.z = Math.max(-58, Math.min(58, obj.position.z));
 }
@@ -555,17 +791,23 @@ const btnPoint = document.getElementById('btnPoint');
 const btnSpot = document.getElementById('btnSpot');
 const clockEl = document.getElementById('clock');
 
-btnDay.onclick = () => {
-  dayAuto = !dayAuto;
+btnDay.onclick = () => { dayAuto = !dayAuto; syncDayUI(); };
+slTime.oninput = () => { manualT = slTime.value / 100; dayAuto = false; syncDayUI(); };
+btnPoint.onclick = () => { pointLight.visible = !pointLight.visible; syncLightUI(); };
+btnSpot.onclick  = () => { spot.visible = !spot.visible; syncLightUI(); };
+
+// Keep the panel UI in sync whether changed by mouse OR keyboard
+function syncDayUI() {
   btnDay.textContent = dayAuto ? '☀ Day Cycle: AUTO' : '☀ Day Cycle: MANUAL';
   btnDay.classList.toggle('on', dayAuto);
-};
-slTime.oninput = () => { manualT = slTime.value / 100; dayAuto = false;
-  btnDay.textContent = '☀ Day Cycle: MANUAL'; btnDay.classList.remove('on'); };
-btnPoint.onclick = () => { pointLight.visible = !pointLight.visible;
-  btnPoint.textContent = pointLight.visible ? 'ON':'OFF'; btnPoint.classList.toggle('on', pointLight.visible); };
-btnSpot.onclick = () => { spot.visible = !spot.visible;
-  btnSpot.textContent = spot.visible ? 'ON':'OFF'; btnSpot.classList.toggle('on', spot.visible); };
+  if (!dayAuto) slTime.value = manualT * 100;
+}
+function syncLightUI() {
+  btnPoint.textContent = pointLight.visible ? 'ON' : 'OFF';
+  btnPoint.classList.toggle('on', pointLight.visible);
+  btnSpot.textContent  = spot.visible ? 'ON' : 'OFF';
+  btnSpot.classList.toggle('on', spot.visible);
+}
 
 function lerpColor(a, b, t) {
   const ca = new THREE.Color(a), cb = new THREE.Color(b);
@@ -583,15 +825,19 @@ function updateDay(t) {
   ambient.intensity = 0.12 + daylight * 0.35;
   hemi.intensity = 0.15 + daylight * 0.45;
 
-  // sky + fog color shift
+  // sky dome crossfade based on time of day
+  updateSky(t);
+
+  // fog color follows the horizon tone of the current slot (smoothed)
   let skyTop, skyBot, label;
-  if (t < 0.22 || t > 0.80) { skyTop='#0b1020'; skyBot='#1a2740'; label='Night'; }
-  else if (t < 0.32)        { skyTop='#3a4a78'; skyBot='#e08a4a'; label='Dawn'; }
-  else if (t < 0.68)        { skyTop='#2a5d9e'; skyBot='#bcd6ef'; label='Midday'; }
-  else                      { skyTop='#3a3a6a'; skyBot='#d8743a'; label='Dusk'; }
-  const fc = lerpColor(skyBot, skyTop, 0.35);
+  if (t < 0.18 || t > 0.88)      { skyTop='#070b18'; skyBot='#141d33'; label='Night'; }
+  else if (t < 0.30)             { skyTop='#2b3a63'; skyBot='#c97a52'; label='Dawn'; }
+  else if (t < 0.42)             { skyTop='#3f6ea8'; skyBot='#f0c98a'; label='Morning'; }
+  else if (t < 0.62)             { skyTop='#2a5d9e'; skyBot='#bcd6ef'; label='Midday'; }
+  else if (t < 0.78)             { skyTop='#39376e'; skyBot='#e0793a'; label='Dusk'; }
+  else                           { skyTop='#1e2347'; skyBot='#7a4a6e'; label='Evening'; }
+  const fc = lerpColor(skyBot, skyTop, 0.4);
   scene.fog.color.copy(fc);
-  renderer.setClearColor(fc);
 
   sun.color.copy(lerpColor('#fff2d0', '#ffb060', 1 - daylight));
 
@@ -616,6 +862,10 @@ function animate() {
   const t = clock.elapsedTime;
 
   if (controls.isLocked) move(dt);
+
+  // keep the sky domes centered on the player
+  skyA.position.copy(camera.position);
+  skyB.position.copy(camera.position);
 
   // animated windmill
   blades.rotation.z += dt * 1.2;
